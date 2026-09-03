@@ -1,7 +1,9 @@
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
@@ -11,6 +13,11 @@ from app.routes import auth, game
 app = FastAPI()
 app.add_middleware(HTTPSRedirectMiddleware)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+@app.get("/")
+async def root() -> FileResponse:
+    return FileResponse(Path("static/index.html"))
 
 
 @app.middleware("http")
