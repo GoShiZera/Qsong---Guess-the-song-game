@@ -1,3 +1,4 @@
+import logging
 import secrets
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -9,20 +10,24 @@ from app.services.spotify import exchange_code_for_tokens, get_auth_url
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 
 @router.get("/login")
-async def login(request: Request, response: Response) -> RedirectResponse:
+async def login() -> RedirectResponse:
     state = secrets.token_urlsafe(16)
-    response.set_cookie(
+    auth_url = get_auth_url(state)
+    redirect_resp = RedirectResponse(url=auth_url)
+    redirect_resp.set_cookie(
         key="oauth_state",
         value=state,
         max_age=600,
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
+        path="/",
     )
-    auth_url = get_auth_url(state)
-    return RedirectResponse(url=auth_url)
+    return redirect_resp
 
 
 @router.get("/callback")
@@ -34,18 +39,23 @@ async def callback(
     error: str | None = None,
 ) -> RedirectResponse:
     if error:
+        logger.error(f"Spotify auth error: {error}")
         raise HTTPException(status_code=400, detail=f"Spotify auth error: {error}")
 
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or state != stored_state:
+        logger.error(f"Invalid state parameter. Stored: {stored_state}, Received: {state}")
         raise HTTPException(status_code=400, detail="Invalid state parameter")
 
     if not code:
+        logger.error("Missing authorization code")
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
     try:
         token_data = await exchange_code_for_tokens(code)
+        logger.info("Successfully exchanged code for tokens")
     except Exception as e:
+        logger.error(f"Failed to exchange code: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to exchange code: {e}") from None
 
     access_token = token_data["access_token"]
@@ -62,7 +72,7 @@ async def callback(
     }
 
     cookie = serialize_session(session_data)
-    response = RedirectResponse(url="/select-playlist")
+    response = RedirectResponse(url="/select-playlist", status_code=302)
     response.set_cookie(
         key="session",
         value=cookie,
@@ -70,8 +80,10 @@ async def callback(
         httponly=True,
         secure=settings.cookie_secure,
         samesite="lax",
+        path="/",
     )
-    response.delete_cookie("oauth_state")
+    response.delete_cookie("oauth_state", path="/")
+    logger.info("Redirecting to /select-playlist")
     return response
 
 

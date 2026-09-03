@@ -163,7 +163,10 @@
     };
 
     const playClip = async (previewUrl, startTimeMs, durationMs) => {
-        if (!previewUrl) return;
+        if (!previewUrl) {
+            console.warn('No preview URL provided');
+            return;
+        }
         
         initAudioContext();
         stopAudio();
@@ -172,6 +175,8 @@
             state.audioBuffer = await fetchAndDecodeAudio(previewUrl);
         } catch (e) {
             console.error('Audio decode error:', e);
+            // Re-enable controls so user can skip or guess
+            setGameControlsEnabled(true);
             return;
         }
 
@@ -608,6 +613,9 @@
 
         try {
             const data = await api.startRound();
+            if (!data.preview_url) {
+                throw new Error('Sem preview de áudio disponível para esta faixa');
+            }
             state.currentTrack = data;
             state.startOffset = data.start_time_ms;
 
@@ -619,7 +627,8 @@
 
         } catch (err) {
             console.error('Start round error:', err);
-            showRoundResult({ correct: false, revealed_track: { name: 'Erro', artist: '' } }, 'Erro');
+            setGameControlsEnabled(true); // Re-enable controls on error
+            showRoundResult({ correct: false, revealed_track: { name: 'Erro ao carregar faixa', artist: '' } }, 'Erro');
         }
     };
 

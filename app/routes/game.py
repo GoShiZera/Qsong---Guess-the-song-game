@@ -119,9 +119,9 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Partida já finalizada")
 
     played_tracks = {r.track.deezer_id for r in state.round_history}
-    available = [t for t in state.pool if t.deezer_id not in played_tracks]
+    available = [t for t in state.pool if t.deezer_id not in played_tracks and t.preview_url]
     if not available:
-        raise HTTPException(status_code=400, detail="Nenhuma faixa disponível")
+        raise HTTPException(status_code=400, detail="Nenhuma faixa com preview disponível")
 
     track = random.choice(available)
     max_offset = max(0, track.duration_ms - 2500)
@@ -140,7 +140,8 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
         max_age=60 * 60 * 24 * 7,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite="none",
+        path="/",
     )
 
     return {
