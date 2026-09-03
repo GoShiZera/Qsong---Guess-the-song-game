@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess The Song</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- View 1: Entrada / Configuração -->
+        <section id="view-setup" class="view active" aria-label="Configuração da partida">
+            <header class="view-header">
+                <h1>Guess The Song</h1>
+                <p class="subtitle">Adivinhe a música pelo trecho</p>
+            </header>
+            
+            <form id="setup-form" class="setup-form">
+                <div class="form-group">
+                    <label for="playlist-input">Playlist do Spotify (URL ou ID)</label>
+                    <input 
+                        type="text" 
+                        id="playlist-input" 
+                        name="playlist" 
+                        placeholder="https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M"
+                        required
+                        autocomplete="off"
+                        aria-describedby="playlist-help"
+                    >
+                    <span id="playlist-help" class="help-text">Cole o link da playlist ou apenas o ID (22 caracteres)</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="rounds-input">Número de rodadas (opcional)</label>
+                    <input 
+                        type="number" 
+                        id="rounds-input" 
+                        name="rounds" 
+                        min="1" 
+                        max="50"
+                        placeholder="Máximo = faixas disponíveis"
+                        autocomplete="off"
+                    >
+                </div>
+                
+                <button type="submit" id="btn-start" class="btn btn-primary" disabled>
+                    <span class="btn-text">Iniciar Jogo</span>
+                    <span class="btn-loader" hidden></span>
+                </button>
+            </form>
+            
+            <div id="setup-error" class="error-message" hidden></div>
+            <div id="setup-progress" class="progress-container" hidden>
+                <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                <p class="progress-text">Buscando faixas e preparando jogo...</p>
+            </div>
+        </section>
+        
+        <!-- View 2: Jogo -->
+        <section id="view-game" class="view" aria-label="Jogo em andamento" hidden>
+            <header class="game-header">
+                <div class="score">
+                    <span id="score-correct" class="score-item correct">Acertos: <strong>0</strong></span>
+                    <span id="score-total" class="score-item total">Rodada: <strong>1</strong>/<strong id="total-rounds">0</strong></span>
+                </div>
+            </header>
+            
+            <div class="attempts-tracker" role="status" aria-live="polite" aria-label="Tentativas">
+                <span class="attempts-label">Tentativas</span>
+                <div class="attempts-boxes" id="attempts-boxes">
+                    <!-- 7 checkboxes gerados via JS -->
+                </div>
+            </div>
+            
+            <div class="player-container" id="player-container">
+                <div class="player" id="player">
+                    <div class="waveform" id="waveform" aria-hidden="true"></div>
+                    <div class="player-controls">
+                        <button type="button" id="btn-play-pause" class="btn-icon" aria-label="Tocar" disabled>
+                            <svg class="icon-play" viewBox="0 0 24 24" width="24" height="24"><polygon points="5,3 19,12 5,21"></polygon></svg>
+                            <svg class="icon-pause" viewBox="0 0 24 24" width="24" height="24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                        </button>
+                        <div class="progress-wrapper">
+                            <span class="time-current" id="time-current">0:00</span>
+                            <div class="progress-bar-player" id="progress-bar-player" role="slider" aria-label="Progresso da música" aria-valuemin="0" aria-valuemax="100" tabindex="0"></div>
+                            <span class="time-total" id="time-total">0:00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <form id="guess-form" class="guess-form" autocomplete="off">
+                <div class="autocomplete-wrapper">
+                    <label for="guess-input" class="visually-hidden">Seu palpite</label>
+                    <input 
+                        type="text" 
+                        id="guess-input" 
+                        name="guess" 
+                        list="tracks-datalist"
+                        placeholder="Digite o nome da música..."
+                        autocomplete="off"
+                        aria-autocomplete="list"
+                        aria-controls="tracks-datalist"
+                        required
+                        disabled
+                    >
+                    <datalist id="tracks-datalist"></datalist>
+                </div>
+                <button type="submit" id="btn-guess" class="btn btn-guess" disabled>
+                    Adivinhar
+                </button>
+            </form>
+            
+            <button type="button" id="btn-skip" class="btn btn-skip" disabled>
+                Pular (Skip)
+            </button>
+            
+            <div id="round-result" class="round-result" hidden>
+                <div class="result-content"></div>
+            </div>
+        </section>
+        
+        <!-- View 3: Resumo -->
+        <section id="view-summary" class="view" aria-label="Resumo da partida" hidden>
+            <header class="view-header">
+                <h1>Fim de Jogo</h1>
+            </header>
+            
+            <div class="summary-stats">
+                <div class="stat stat-correct">
+                    <span class="stat-value" id="final-correct">0</span>
+                    <span class="stat-label">Acertos</span>
+                </div>
+                <div class="stat stat-wrong">
+                    <span class="stat-value" id="final-wrong">0</span>
+                    <span class="stat-label">Erros</span>
+                </div>
+            </div>
+            
+            <div class="rounds-detail" id="rounds-detail">
+                <!-- Detalhes por rodada gerados via JS -->
+            </div>
+            
+            <button type="button" id="btn-new-game" class="btn btn-primary">
+                Nova Partida
+            </button>
+        </section>
+    </div>
+    
+    <script src="/static/game.js"></script>
+</body>
+</html>

@@ -253,29 +253,30 @@ Todos devem passar.
 
 ## 11. Checklist por Fase
 
-### Fase 1 — Spotify Service + `/game/start` ✅ PRÓXIMA
-- [ ] `app/services/spotify.py`: `get_app_token()`, `fetch_playlist_tracks()`, `extract_metadata()`
-- [ ] `app/models.py`: models acima
-- [ ] `app/game_state.py`: expandir com `GameState` + serialização completa
-- [ ] `app/routes/game.py`: `GET /game/start` (validação, busca, matching, retorna pool)
-- [ ] Testes: `test_spotify.py` (mock httpx), `test_game_state.py` (GameState round-trip)
+### Fase 1 — Spotify Service + `/game/start` ✅ CONCLUÍDA
+- [x] `app/services/spotify.py`: `get_app_token()`, `fetch_playlist_tracks()` (Client Credentials Flow)
+- [x] `app/models.py`: models Pydantic (SpotifyTrack, DeezerTrack, PlayableTrack, GameState, GuessRecord, RoundResult)
+- [x] `app/game_state.py`: `serialize_game_state()`, `deserialize_game_state()` com GameState completo
+- [x] `app/routes/game.py`: `GET /game/start`, `POST /round/start`, `POST /round/guess`, `POST /round/skip`, `GET /game/summary`
+- [x] Testes: `test_spotify.py` (mock httpx), `test_game_state.py` (GameState round-trip + tampering)
 
-### Fase 2 — Deezer Matching
-- [ ] `app/services/deezer.py`: `search_track()`, `match_spotify_to_deezer()`, semáforo + retry
-- [ ] Integração em `/game/start`
-- [ ] Testes: `test_deezer.py` (matching logic puro)
+### Fase 2 — Deezer Matching ✅ CONCLUÍDA
+- [x] `app/services/deezer.py`: `search_track()`, `match_spotify_to_deezer()`, semáforo 10 + retry exponencial
+- [x] Integração em `/game/start` (preenche `preview_url` e `deezer_id` no pool via matching)
+- [x] Testes: `test_deezer.py` (artist matching, best match selection, search_track, match_spotify_to_deezer)
 
-### Fase 3 — Game Engine
-- [ ] `app/routes/game.py`: `POST /round/start`, `/round/guess`, `/round/skip`, `/game/summary`
-- [ ] Lógica de tentativas, start_offset, normalização de palpite
-- [ ] Testes: `test_game_engine.py` (TestClient round loop completo)
+### Fase 3 — Game Engine ✅ CONCLUÍDA
+- [x] `app/routes/game.py`: `POST /round/start`, `/round/guess` (com Body), `/round/skip`, `/game/summary` — todos funcionais
+- [x] Lógica de tentativas (7 fixas), start_offset aleatório, normalização de palpite (NFD + lower + strip acentos)
+- [x] Testes: `test_game_engine.py` (6 testes de integração: fluxo completo, acerto antecipado, game over, sessão inválida, progressão de duração, histórico detalhado)
+- [x] Total: 33 testes passando (config, game_state, spotify, deezer, game_engine)
 
-### Fase 4 — Frontend
-- [ ] `static/index.html`: 3 views (entrada, jogo, resumo)
-- [ ] `static/style.css`: tema Spotify, responsivo, acessível
-- [ ] `static/game.js`: Web Audio API, autocomplete `<datalist>`, state machine UI
+### Fase 4 — Frontend ✅ CONCLUÍDA
+- [x] `static/index.html` — SPA com 3 views (entrada playlist, jogo, resumo)
+- [x] `static/style.css` — Tema escuro estilo Spotify, responsivo, acessível (ARIA, contraste, foco visível)
+- [x] `static/game.js` — Web Audio API (`AudioContext`, `decodeAudioData`, `AudioBufferSourceNode`), autocomplete `<datalist>`, state machine UI, atalhos de teclado
 
-### Fase 5 — Integração
+### Fase 5 — Integração ✅ PRÓXIMA
 - [ ] Fluxo completo jogável manualmente
 - [ ] Tela de resumo com detalhamento por round
 
@@ -305,18 +306,20 @@ Todos devem passar.
 
 ## 13. Para Agentes Futuros: Onde Paramos
 
-**Última fase concluída:** Fase 0 (Setup)
-- Config, middleware, sessão, rotas stub, testes base, CI passando
+**Última fase concluída:** Fase 4 (Frontend)
+- Frontend completo: `static/index.html` (3 views), `static/style.css` (tema Spotify, responsivo, acessível), `static/game.js` (Web Audio API, autocomplete, state machine)
+- Web Audio API implementada: `AudioContext` → `fetch(arrayBuffer)` → `decodeAudioData()` → `AudioBufferSourceNode.start(when, offset, duration)`
+- Autocomplete nativo via `<datalist>` — zero latência, sem round-trip ao backend
+- State machine UI: setup → playing → round result → summary
+- Atalhos de teclado: Espaço (play/pause), Enter (adivinhar), S (skip)
+- Acessibilidade: ARIA labels, live regions, foco visível, prefers-reduced-motion, high contrast
 
-**Próxima tarefa:** Iniciar Fase 1 — `app/services/spotify.py` com Client Credentials Flow
+**Próxima tarefa:** Iniciar Fase 5 — Integração e Testes E2E Manuais
 
-**Arquivos a criar/modificar na Fase 1:**
-1. `app/models.py` (novo)
-2. `app/services/spotify.py` (novo)
-3. `app/game_state.py` (expandir)
-4. `app/routes/game.py` (implementar `/game/start`)
-5. `tests/test_spotify.py` (novo)
-6. `tests/test_game_state.py` (expandir para GameState)
+**Arquivos para Fase 5:**
+1. Testar fluxo completo manualmente no navegador
+2. Verificar cold start (cookie persiste estado)
+3. Ajustes finos de UX se necessário
 
 ---
 
