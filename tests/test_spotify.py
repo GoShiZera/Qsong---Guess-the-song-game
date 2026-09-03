@@ -3,18 +3,18 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from app.services.spotify import _token_cache, fetch_playlist_tracks, get_app_token
+from app.services.spotify import _app_token_cache, fetch_playlist_tracks, get_app_token
 
 
 @pytest.fixture(autouse=True)
 def clear_token_cache() -> None:
-    _token_cache.clear()
-    _token_cache["access_token"] = None
-    _token_cache["expires_at"] = 0
+    _app_token_cache.clear()
+    _app_token_cache["access_token"] = None
+    _app_token_cache["expires_at"] = 0
     yield
-    _token_cache.clear()
-    _token_cache["access_token"] = None
-    _token_cache["expires_at"] = 0
+    _app_token_cache.clear()
+    _app_token_cache["access_token"] = None
+    _app_token_cache["expires_at"] = 0
 
 
 @pytest.mark.asyncio
@@ -103,5 +103,5 @@ async def test_fetch_playlist_tracks_404(monkeypatch: MonkeyPatch) -> None:
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
     with patch("httpx.AsyncClient", return_value=mock_client):
-        with pytest.raises(ValueError, match="Playlist não encontrada"):
+        with pytest.raises(ValueError, match="Recurso não encontrado"):
             await fetch_playlist_tracks("invalid_playlist")

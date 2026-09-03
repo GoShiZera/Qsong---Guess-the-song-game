@@ -9,20 +9,28 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 from app.game_state import deserialize_game_state, serialize_game_state
 from app.models import GameState, GuessRecord, RoundResult
 from app.services.deezer import match_spotify_to_deezer
-from app.services.spotify import fetch_playlist_tracks
+from app.services.spotify import fetch_album_tracks, fetch_playlist_tracks
 
 router = APIRouter()
 
 PLAYLIST_ID_REGEX = re.compile(r"playlist/([a-zA-Z0-9]{22})")
+ALBUM_ID_REGEX = re.compile(r"album/([a-zA-Z0-9]{22})")
 CLIP_DURATIONS = [100, 200, 400, 800, 1600, 2000, 2500]
 
 
-def extract_playlist_id(input_str: str) -> str | None:
+def extract_spotify_id(input_str: str) -> tuple[str, str] | None:
+    """Extract Spotify ID and type (playlist/album) from URL or raw ID."""
+    # Try playlist URL
     match = PLAYLIST_ID_REGEX.search(input_str)
     if match:
-        return match.group(1)
+        return match.group(1), "playlist"
+    # Try album URL
+    match = ALBUM_ID_REGEX.search(input_str)
+    if match:
+        return match.group(1), "album"
+    # Try raw ID (22 chars)
     if re.fullmatch(r"[a-zA-Z0-9]{22}", input_str):
-        return input_str
+        return input_str, "playlist"  # default to playlist for raw ID
     return None
 
 
@@ -44,21 +52,26 @@ async def game_start(
 ) -> dict[str, Any]:
     raw_id = playlist_id or url
     if not raw_id:
-        raise HTTPException(status_code=400, detail="Forneça playlist_id ou url")
+        raise HTTPException(status_code=400, detail="Forneça playlist_id, album_id ou url")
 
-    pid = extract_playlist_id(raw_id)
-    if not pid:
-        raise HTTPException(status_code=400, detail="ID de playlist inválido")
+    extracted = extract_spotify_id(raw_id)
+    if not extracted:
+        raise HTTPException(status_code=400, detail="ID de playlist/álbum inválido")
+
+    spotify_id, resource_type = extracted
 
     try:
-        spotify_tracks = await fetch_playlist_tracks(pid)
+        if resource_type == "album":
+            spotify_tracks = await fetch_album_tracks(spotify_id)
+        else:
+            spotify_tracks = await fetch_playlist_tracks(spotify_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
     except Exception:
-        raise HTTPException(status_code=502, detail="Erro ao buscar playlist no Spotify") from None
+        raise HTTPException(status_code=502, detail="Erro ao buscar no Spotify") from None
 
     if not spotify_tracks:
-        raise HTTPException(status_code=404, detail="Playlist vazia ou sem faixas válidas")
+        raise HTTPException(status_code=404, detail="Nenhuma faixa válida encontrada")
 
     pool = await match_spotify_to_deezer(spotify_tracks)
 
@@ -73,7 +86,7 @@ async def game_start(
         rounds_total = len(pool)
 
     state = GameState(
-        playlist_id=pid,
+        playlist_id=spotify_id,
         pool=pool,
         rounds_total=rounds_total,
     )
