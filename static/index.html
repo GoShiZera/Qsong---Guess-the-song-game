@@ -8,16 +8,25 @@
 </head>
 <body>
     <div id="app">
-        <!-- View 1: Entrada / Configuração -->
+        <!-- View 1: Entrada / Configuração (modo público) -->
         <section id="view-setup" class="view active" aria-label="Configuração da partida">
             <header class="view-header">
                 <h1>Guess The Song</h1>
                 <p class="subtitle">Adivinhe a música pelo trecho</p>
             </header>
             
-            <form id="setup-form" class="setup-form">
+            <div class="setup-options">
+                <button type="button" id="btn-login-spotify" class="btn btn-spotify">
+                    <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24C7.167 15.142 3.83 12.777 3.83 8.998c0-2.384 1.578-4.455 3.853-5.193.241-.06.48-.061.721 0 2.256.707 3.83 2.76 3.83 5.162 0 1.553-.72 2.915-1.839 3.804-.24.179-.18.599.12 1.022zm1.56-2.622c1.948-1.38 3.096-3.707 3.096-6.135 0-3.655-2.539-5.756-5.912-5.756-3.372 0-5.912 2.101-5.912 5.756 0 2.734 1.334 5.205 3.43 6.578.24.18.18.599-.061.72-2.43.871-4.216 2.812-4.216 5.29 0 3.034 2.539 5.107 5.912 5.107 3.633 0 6.048-2.227 6.048-5.815 0-.539-.061-1.08-.18-1.56z"/></svg>
+                    <span>Entrar com Spotify</span>
+                </button>
+                <p class="divider">ou</p>
+                <p class="option-hint">Jogar com playlist/álbum público (link direto)</p>
+            </div>
+            
+            <form id="setup-form" class="setup-form" hidden>
                 <div class="form-group">
-                    <label for="playlist-input">Playlist do Spotify (URL ou ID)</label>
+                    <label for="playlist-input">Playlist/Álbum do Spotify (URL ou ID)</label>
                     <input 
                         type="text" 
                         id="playlist-input" 
@@ -27,7 +36,7 @@
                         autocomplete="off"
                         aria-describedby="playlist-help"
                     >
-                    <span id="playlist-help" class="help-text">Cole o link da playlist ou apenas o ID (22 caracteres)</span>
+                    <span id="playlist-help" class="help-text">Cole o link da playlist/álbum ou apenas o ID (22 caracteres)</span>
                 </div>
                 
                 <div class="form-group">
@@ -56,6 +65,42 @@
             </div>
         </section>
         
+        <!-- View 1b: Seleção de Playlist (após login) -->
+        <section id="view-select-playlist" class="view" aria-label="Selecionar playlist" hidden>
+            <header class="view-header">
+                <h1>Escolha sua Playlist</h1>
+                <p class="subtitle">Suas playlists do Spotify</p>
+            </header>
+            
+            <div id="user-profile" class="user-profile" hidden>
+                <img id="user-avatar" src="" alt="" width="48" height="48">
+                <span id="user-name"></span>
+                <button type="button" id="btn-logout" class="btn btn-ghost btn-sm">Sair</button>
+            </div>
+            
+            <div id="playlists-loading" class="progress-container" hidden>
+                <div class="progress-bar" role="progressbar"></div>
+                <p class="progress-text">Carregando suas playlists...</p>
+            </div>
+            
+            <div id="playlists-error" class="error-message" hidden></div>
+            
+            <ul id="playlists-list" class="playlists-list" hidden>
+                <!-- Playlists carregadas via JS -->
+            </ul>
+            
+            <div class="form-group" hidden>
+                <label for="rounds-input-select">Número de rodadas (opcional)</label>
+                <input 
+                    type="number" 
+                    id="rounds-input-select" 
+                    min="1" 
+                    max="50"
+                    placeholder="Máximo = faixas disponíveis"
+                >
+            </div>
+        </section>
+        
         <!-- View 2: Jogo -->
         <section id="view-game" class="view" aria-label="Jogo em andamento" hidden>
             <header class="game-header">
@@ -67,9 +112,7 @@
             
             <div class="attempts-tracker" role="status" aria-live="polite" aria-label="Tentativas">
                 <span class="attempts-label">Tentativas</span>
-                <div class="attempts-boxes" id="attempts-boxes">
-                    <!-- 7 checkboxes gerados via JS -->
-                </div>
+                <div class="attempts-boxes" id="attempts-boxes"></div>
             </div>
             
             <div class="player-container" id="player-container">
@@ -137,9 +180,7 @@
                 </div>
             </div>
             
-            <div class="rounds-detail" id="rounds-detail">
-                <!-- Detalhes por rodada gerados via JS -->
-            </div>
+            <div class="rounds-detail" id="rounds-detail"></div>
             
             <button type="button" id="btn-new-game" class="btn btn-primary">
                 Nova Partida

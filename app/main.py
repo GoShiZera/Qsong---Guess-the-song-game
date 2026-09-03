@@ -20,6 +20,11 @@ async def root() -> FileResponse:
     return FileResponse(Path("static/index.html"))
 
 
+@app.get("/select-playlist")
+async def select_playlist_page() -> FileResponse:
+    return FileResponse(Path("static/index.html"))
+
+
 @app.middleware("http")
 async def session_middleware(
     request: Request,

@@ -1,6 +1,6 @@
 // ============================================
 // Guess The Song - Frontend Game Logic
-// Web Audio API + Autocomplete + State Machine
+// Web Audio API + Autocomplete + State Machine + Spotify Auth
 // ============================================
 
 (() => {
@@ -32,16 +32,18 @@
         playStartTime: 0,
         scheduledStopTime: 0,
         progressAnimationId: null,
+        selectedPlaylistId: null,
     };
 
     // ---------- DOM Elements ----------
     const els = {
         // Views
         viewSetup: document.getElementById('view-setup'),
+        viewSelectPlaylist: document.getElementById('view-select-playlist'),
         viewGame: document.getElementById('view-game'),
         viewSummary: document.getElementById('view-summary'),
 
-        // Setup
+        // Setup (public)
         setupForm: document.getElementById('setup-form'),
         playlistInput: document.getElementById('playlist-input'),
         roundsInput: document.getElementById('rounds-input'),
@@ -50,6 +52,19 @@
         setupProgress: document.getElementById('setup-progress'),
         progressBar: document.querySelector('#setup-progress .progress-bar'),
         progressText: document.querySelector('#setup-progress .progress-text'),
+
+        // Login
+        btnLoginSpotify: document.getElementById('btn-login-spotify'),
+
+        // Select Playlist (after login)
+        userProfile: document.getElementById('user-profile'),
+        userAvatar: document.getElementById('user-avatar'),
+        userName: document.getElementById('user-name'),
+        btnLogout: document.getElementById('btn-logout'),
+        playlistsLoading: document.getElementById('playlists-loading'),
+        playlistsError: document.getElementById('playlists-error'),
+        playlistsList: document.getElementById('playlists-list'),
+        roundsInputSelect: document.getElementById('rounds-input-select'),
 
         // Game
         scoreCorrect: document.getElementById('score-correct'),
@@ -88,9 +103,16 @@
     };
 
     const showView = (viewName) => {
-        ['viewSetup', 'viewGame', 'viewSummary'].forEach(v => {
-            els[v].classList.toggle('active', v === `view${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`);
-            els[v].hidden = v !== `view${viewName.charAt(0).toUpperCase() + viewName.slice(1)}`;
+        const viewMap = {
+            setup: 'viewSetup',
+            selectPlaylist: 'viewSelectPlaylist',
+            game: 'viewGame',
+            summary: 'viewSummary',
+        };
+        Object.entries(viewMap).forEach(([key, elKey]) => {
+            const isActive = key === viewName;
+            els[elKey].classList.toggle('active', isActive);
+            els[elKey].hidden = !isActive;
         });
         state.view = viewName;
     };
@@ -103,13 +125,13 @@
         if (loader) loader.hidden = !loading;
     };
 
-    const showError = (msg) => {
-        els.setupError.textContent = msg;
-        els.setupError.hidden = false;
+    const showError = (el, msg) => {
+        el.textContent = msg;
+        el.hidden = false;
     };
 
-    const hideError = () => {
-        els.setupError.hidden = true;
+    const hideError = (el) => {
+        el.hidden = true;
     };
 
     const updateProgress = (percent, text) => {
@@ -174,9 +196,7 @@
         updatePlayPauseButton(true);
         startProgressLoop(actualDuration * 1000);
 
-        state.sourceNode.onended = () => {
-            onAudioEnded();
-        };
+        state.sourceNode.onended = () => onAudioEnded();
     };
 
     const stopAudio = () => {
@@ -290,6 +310,13 @@
             return handleResponse(res);
         },
 
+        async getUserPlaylists() {
+            const res = await fetch(`${API_BASE}/user/playlists`, {
+                credentials: 'include',
+            });
+            return handleResponse(res);
+        },
+
         async startRound() {
             const res = await fetch(`${API_BASE}/round/start`, {
                 method: 'POST',
@@ -318,6 +345,14 @@
 
         async summary() {
             const res = await fetch(`${API_BASE}/game/summary`, {
+                credentials: 'include',
+            });
+            return handleResponse(res);
+        },
+
+        async logout() {
+            const res = await fetch(`${API_BASE}/logout`, {
+                method: 'POST',
                 credentials: 'include',
             });
             return handleResponse(res);
@@ -437,16 +472,47 @@
         });
     };
 
+    const renderPlaylists = (playlists) => {
+        els.playlistsList.innerHTML = '';
+        if (!playlists.length) {
+            els.playlistsList.innerHTML = '<li class="playlists-empty">Nenhuma playlist com faixas encontrada</li>';
+            return;
+        }
+        playlists.forEach(pl => {
+            const li = document.createElement('li');
+            li.className = 'playlist-item';
+            li.tabIndex = 0;
+            li.dataset.playlistId = pl.id;
+            const imgUrl = pl.images?.[0]?.url || '';
+            li.innerHTML = `
+                ${imgUrl ? `<img src="${imgUrl}" alt="" loading="lazy">` : '<div class="playlist-placeholder" style="width:56px;height:56px;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:20px;">🎵</div>'}
+                <div class="playlist-info">
+                    <span class="playlist-name">${pl.name}</span>
+                    <span class="playlist-meta">${pl.tracks_total} faixas ${pl.public ? '• Pública' : '• Privada'}</span>
+                </div>
+                <svg class="playlist-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            `;
+            const selectPlaylist = () => startGameFromPlaylist(pl.id);
+            li.addEventListener('click', selectPlaylist);
+            li.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    selectPlaylist();
+                }
+            });
+            els.playlistsList.appendChild(li);
+        });
+    };
+
     // ---------- Game Flow ----------
     const startNewGame = async (playlistId, rounds) => {
-        hideError();
+        hideError(els.setupError);
         els.setupForm.hidden = true;
         els.setupProgress.hidden = false;
         setLoading(els.btnStart, true);
         updateProgress(0, 'Conectando ao Spotify...');
 
         try {
-            // Simulate progress updates
             const progressSteps = [
                 { p: 20, t: 'Buscando playlist...' },
                 { p: 40, t: 'Encontrando prévias no Deezer...' },
@@ -479,11 +545,43 @@
 
         } catch (err) {
             console.error('Start game error:', err);
-            showError(err.message || 'Erro ao iniciar jogo. Verifique a playlist e tente novamente.');
+            showError(els.setupError, err.message || 'Erro ao iniciar jogo. Verifique a playlist e tente novamente.');
             els.setupForm.hidden = false;
         } finally {
             els.setupProgress.hidden = true;
             setLoading(els.btnStart, false);
+        }
+    };
+
+    const startGameFromPlaylist = async (playlistId) => {
+        const rounds = els.roundsInputSelect?.value ? parseInt(els.roundsInputSelect.value, 10) : null;
+        state.selectedPlaylistId = playlistId;
+        hideError(els.playlistsError);
+        els.playlistsList.hidden = true;
+        els.playlistsLoading.hidden = false;
+        try {
+            const data = await api.startGame(playlistId, rounds);
+            updateProgress(100, 'Pronto!');
+            await new Promise(r => setTimeout(r, 300));
+
+            state.pool = data.tracks.map(t => ({ name: t.name, artist: t.artist }));
+            state.totalRounds = data.rounds_total;
+            state.roundNumber = 1;
+            state.correctCount = 0;
+            state.wrongCount = 0;
+            state.roundHistory = [];
+
+            populateDatalist(data.tracks);
+            createAttemptBoxes();
+            updateScoreDisplay();
+            showView('game');
+            await startNextRound();
+        } catch (err) {
+            console.error('Start game error:', err);
+            showError(els.playlistsError, err.message || 'Erro ao iniciar jogo');
+            els.playlistsList.hidden = false;
+        } finally {
+            els.playlistsLoading.hidden = true;
         }
     };
 
@@ -517,7 +615,6 @@
             setGameControlsEnabled(true);
             els.guessInput.focus();
 
-            // Auto-play the clip
             await playClip(data.preview_url, data.start_time_ms, data.clip_duration_ms);
 
         } catch (err) {
@@ -558,7 +655,6 @@
                     setTimeout(() => startNextRound(), 2000);
                 }
             } else {
-                // Next attempt - play longer clip
                 setTimeout(async () => {
                     setGameControlsEnabled(true);
                     els.guessInput.value = '';
@@ -616,7 +712,6 @@
             showView('summary');
         } catch (err) {
             console.error('Summary error:', err);
-            // Fallback to local state
             renderSummary({
                 acertos: state.correctCount,
                 erros: state.wrongCount,
@@ -626,9 +721,47 @@
         }
     };
 
+    // ---------- Auth / Playlist Selection ----------
+    const handleLoginSpotify = () => {
+        window.location.href = '/login';
+    };
+
+    const loadUserPlaylists = async () => {
+        els.playlistsLoading.hidden = false;
+        els.playlistsError.hidden = true;
+        els.playlistsList.hidden = true;
+        try {
+            const playlists = await api.getUserPlaylists();
+            renderPlaylists(playlists);
+        } catch (err) {
+            console.error('Load playlists error:', err);
+            showError(els.playlistsError, 'Erro ao carregar playlists. Tente fazer login novamente.');
+        } finally {
+            els.playlistsLoading.hidden = true;
+            els.playlistsList.hidden = false;
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await api.logout();
+        } catch {}
+        // Clear local state
+        state.pool = [];
+        state.currentTrack = null;
+        state.roundHistory = [];
+        state.selectedPlaylistId = null;
+        els.setupForm.hidden = false;
+        els.playlistInput.value = '';
+        els.roundsInput.value = '';
+        els.btnStart.disabled = true;
+        showView('setup');
+        els.playlistInput.focus();
+    };
+
     // ---------- Event Listeners ----------
     const initEventListeners = () => {
-        // Setup form
+        // Setup form (public)
         els.setupForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const playlist = els.playlistInput.value.trim();
@@ -638,8 +771,21 @@
 
         els.playlistInput.addEventListener('input', () => {
             els.btnStart.disabled = !els.playlistInput.value.trim();
-            hideError();
+            hideError(els.setupError);
         });
+
+        // Login button
+        els.btnLoginSpotify?.addEventListener('click', handleLoginSpotify);
+
+        // Logout
+        els.btnLogout?.addEventListener('click', handleLogout);
+
+        // Select playlist form
+        if (els.roundsInputSelect) {
+            els.roundsInputSelect.addEventListener('input', () => {
+                // validation if needed
+            });
+        }
 
         // Game controls
         els.btnPlayPause.addEventListener('click', togglePlayPause);
@@ -653,27 +799,24 @@
         });
         els.btnSkip.addEventListener('click', handleSkip);
 
-        // Progress bar click to seek (when implemented)
+        // Progress bar click to seek
         els.progressBarPlayer?.addEventListener('click', (e) => {
             if (!state.isPlaying || !state.audioBuffer) return;
             const rect = els.progressBarPlayer.getBoundingClientRect();
             const percent = (e.clientX - rect.left) / rect.width;
-            // Note: seeking with Web Audio API requires restarting the source
-            // This is a simplified implementation
         });
 
-        // Summary
+        // New game button
         els.btnNewGame.addEventListener('click', () => {
-            // Reset all state
             state.pool = [];
             state.currentTrack = null;
             state.roundHistory = [];
-            state.sessionCookie = null;
+            state.selectedPlaylistId = null;
             els.setupForm.hidden = false;
             els.playlistInput.value = '';
             els.roundsInput.value = '';
             els.btnStart.disabled = true;
-            hideError();
+            hideError(els.setupError);
             showView('setup');
             els.playlistInput.focus();
         });
@@ -705,8 +848,16 @@
     const init = () => {
         initEventListeners();
         createAttemptBoxes();
-        showView('setup');
-        els.playlistInput.focus();
+
+        // Check current URL to determine initial view
+        const path = window.location.pathname;
+        if (path === '/select-playlist') {
+            loadUserPlaylists();
+            showView('selectPlaylist');
+        } else {
+            showView('setup');
+            els.playlistInput.focus();
+        }
     };
 
     // Start when DOM ready

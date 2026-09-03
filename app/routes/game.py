@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 from app.game_state import deserialize_game_state, serialize_game_state
 from app.models import GameState, GuessRecord, RoundResult
 from app.services.deezer import match_spotify_to_deezer
-from app.services.spotify import fetch_album_tracks, fetch_playlist_tracks
+from app.services.spotify import fetch_album_tracks, fetch_playlist_tracks, fetch_user_playlists
 
 router = APIRouter()
 
@@ -243,3 +243,20 @@ async def _get_game_state(request: Request) -> GameState | None:
     if not cookie:
         return None
     return deserialize_game_state(cookie)
+
+
+@router.get("/user/playlists")
+async def get_user_playlists(request: Request) -> list[dict[str, Any]]:
+    session = getattr(request.state, "session", {})
+    user_tokens = session.get("user_tokens")
+    if not user_tokens:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+
+    access_token = user_tokens.get("access_token")
+    refresh_token = user_tokens.get("refresh_token")
+
+    try:
+        playlists = await fetch_user_playlists(access_token, refresh_token)
+        return playlists
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar playlists: {e}") from None

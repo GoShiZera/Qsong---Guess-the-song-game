@@ -183,7 +183,8 @@ async def _fetch_spotify_items(
             data = resp.json()
 
             for item in data.get("items", []):
-                track = item.get("track")
+                # Playlist: item has nested "track" key; Album: item IS the track
+                track = item.get("track") if "track" in item else item
                 if not track or track.get("type") != "track":
                     continue
                 artists = track.get("artists", [])

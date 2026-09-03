@@ -831,6 +831,214 @@ input::placeholder {
     }
 }
 
+/* Setup Options */
+.setup-options {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    text-align: center;
+    padding: 16px 0;
+}
+
+.btn-spotify {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+    padding: 16px 24px;
+    background: #1db954;
+    color: #000;
+    border: none;
+    border-radius: var(--radius-full);
+    font-size: 1rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.btn-spotify:hover {
+    background: #1ed760;
+    transform: scale(1.02);
+}
+
+.btn-spotify:active {
+    transform: scale(0.98);
+}
+
+.btn-spotify:focus-visible {
+    outline: 2px solid #1db954;
+    outline-offset: 2px;
+}
+
+.divider {
+    position: relative;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 8px 0;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 40%;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.divider::before { left: 0; }
+.divider::after { right: 0; }
+
+.option-hint {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: -8px;
+}
+
+/* User Profile */
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+}
+
+.user-profile img {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.user-profile span {
+    flex: 1;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-ghost:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+}
+
+/* Playlists List */
+.playlists-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.playlist-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.playlist-item:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-green);
+    transform: translateX(4px);
+}
+
+.playlist-item:focus-visible {
+    outline: 2px solid var(--accent-green);
+    outline-offset: 2px;
+}
+
+.playlist-item img {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.playlist-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.playlist-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.playlist-meta {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.playlist-arrow {
+    color: var(--text-muted);
+    transition: color var(--transition-fast);
+}
+
+.playlist-item:hover .playlist-arrow {
+    color: var(--accent-green);
+}
+
+/* Empty state */
+.playlists-empty {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-muted);
+}
+
+/* Responsive adjustments for setup options */
+@media (max-width: 480px) {
+    .btn-spotify {
+        max-width: none;
+    }
+    
+    .divider::before,
+    .divider::after {
+        width: 30%;
+    }
+}
+
 /* Print */
 @media print {
     .btn, .guess-form, .player-controls, .attempts-tracker {
