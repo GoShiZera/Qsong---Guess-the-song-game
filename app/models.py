@@ -8,6 +8,7 @@ class SpotifyTrack(BaseModel):
     artist: str
     spotify_id: str
     duration_ms: int
+    preview_url: str | None = None
 
 
 class DeezerTrack(BaseModel):

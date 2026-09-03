@@ -79,7 +79,7 @@ async def game_start(
     if not pool:
         raise HTTPException(
             status_code=404,
-            detail="Nenhuma faixa jogável após matching com Deezer",
+            detail="Nenhuma faixa com preview disponível (Spotify ou Deezer)",
         )
 
     rounds_total = rounds or len(pool)

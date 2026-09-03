@@ -11,6 +11,10 @@ _MAX_RETRIES = 3
 _BASE_DELAY = 0.5
 
 
+def _has_valid_preview(url: str | None) -> bool:
+    return bool(url and url.strip())
+
+
 async def search_track(artist: str, title: str) -> list[DeezerTrack]:
     query = f'artist:"{artist}" track:"{title}"'
     params: dict[str, str | int] = {"q": query, "limit": 20}
@@ -69,26 +73,52 @@ def _select_best_match(expected_artist: str, candidates: list[DeezerTrack]) -> D
 
 
 async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[PlayableTrack]:
-    tasks = [search_track(st.artist, st.name) for st in spotify_tracks]
-    all_results = await asyncio.gather(*tasks, return_exceptions=True)
+    """
+    Match Spotify tracks to playable tracks.
+    Priority: 1) Spotify preview_url, 2) Deezer search, 3) Skip if no preview found.
+    """
+    # First, separate tracks that already have Spotify preview
+    def _has_spotify_preview(st: SpotifyTrack) -> bool:
+        return _has_valid_preview(st.preview_url)
+
+    tracks_with_spotify_preview = [st for st in spotify_tracks if _has_spotify_preview(st)]
+    tracks_without_preview = [st for st in spotify_tracks if not _has_spotify_preview(st)]
 
     playable: list[PlayableTrack] = []
-    for st, results in zip(spotify_tracks, all_results, strict=False):
-        if isinstance(results, Exception) or not results:
-            continue
-        best = _select_best_match(st.artist, results)  # type: ignore[arg-type]
-        if best is None:
-            continue
-        if not best.preview_url:
-            continue
+
+    # 1. Use Spotify preview directly for tracks that have it
+    for st in tracks_with_spotify_preview:
         playable.append(
             PlayableTrack(
                 name=st.name,
                 artist=st.artist,
-                preview_url=best.preview_url,
-                duration_ms=best.duration * 1000,
-                deezer_id=best.id,
+                preview_url=st.preview_url or "",
+                duration_ms=st.duration_ms,
+                deezer_id=0,  # 0 indicates from Spotify directly
             )
         )
+
+    # 2. For tracks without Spotify preview, search Deezer
+    if tracks_without_preview:
+        tasks = [search_track(st.artist, st.name) for st in tracks_without_preview]
+        all_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for st, results in zip(tracks_without_preview, all_results, strict=False):
+            if isinstance(results, Exception) or not results:
+                continue
+            best = _select_best_match(st.artist, results)  # type: ignore[arg-type]
+            if best is None:
+                continue
+            if not _has_valid_preview(best.preview_url):
+                continue
+            playable.append(
+                PlayableTrack(
+                    name=st.name,
+                    artist=st.artist,
+                    preview_url=best.preview_url,
+                    duration_ms=best.duration * 1000,
+                    deezer_id=best.id,
+                )
+            )
 
     return playable

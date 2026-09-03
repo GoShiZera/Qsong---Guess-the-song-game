@@ -104,28 +104,29 @@ async def _call_spotify_with_user_token(
     refresh_token: str | None,
     method: str,
     url: str,
-) -> tuple[httpx.Response, str | None]:
-    """Call Spotify API with user token, auto-refresh on 401."""
+) -> tuple[httpx.Response, str | None, str | None]:
+    """Call Spotify API with user token, auto-refresh on 401.
+    Returns: (response, new_access_token, new_refresh_token)"""
     headers = {"Authorization": f"Bearer {access_token}"}
 
     async with httpx.AsyncClient() as client:
         resp = await client.request(method, url, headers=headers, timeout=10.0)
 
+    new_access_token = None
     new_refresh_token = None
     if resp.status_code == 401 and refresh_token:
         # Try to refresh
         try:
             token_data = await refresh_user_token(refresh_token)
-            new_access = token_data["access_token"]
-            new_refresh = token_data.get("refresh_token", refresh_token)
-            headers["Authorization"] = f"Bearer {new_access}"
+            new_access_token = token_data["access_token"]
+            new_refresh_token = token_data.get("refresh_token", refresh_token)
+            headers["Authorization"] = f"Bearer {new_access_token}"
             async with httpx.AsyncClient() as client:
                 resp = await client.request(method, url, headers=headers, timeout=10.0)
-            new_refresh_token = new_refresh
         except Exception:
             pass  # Refresh failed, return original 401
 
-    return resp, new_refresh_token
+    return resp, new_access_token, new_refresh_token
 
 
 async def fetch_user_playlists(
@@ -134,12 +135,19 @@ async def fetch_user_playlists(
     """Fetch user's playlists."""
     items = []
     url = "https://api.spotify.com/v1/me/playlists?limit=50"
+    current_access = access_token
+    current_refresh = refresh_token
     while url:
-        resp, new_refresh = await _call_spotify_with_user_token(
-            access_token, refresh_token, "GET", url
+        resp, new_access, new_refresh = await _call_spotify_with_user_token(
+            current_access, current_refresh, "GET", url
         )
         if resp.status_code == 401:
             raise ValueError("Token expirado ou inválido")
+        # Update tokens if they were refreshed
+        if new_access:
+            current_access = new_access
+        if new_refresh:
+            current_refresh = new_refresh
         resp.raise_for_status()
         data = resp.json()
         for pl in data.get("items", []):
@@ -195,6 +203,7 @@ async def _fetch_spotify_items(
                         artist=artist_name,
                         spotify_id=track["id"],
                         duration_ms=track["duration_ms"],
+                        preview_url=track.get("preview_url"),
                     )
                 )
 
