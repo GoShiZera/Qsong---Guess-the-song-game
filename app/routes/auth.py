@@ -74,7 +74,7 @@ async def callback(
     cookie = serialize_session(session_data)
     response = RedirectResponse(url="/select-playlist", status_code=302)
     response.set_cookie(
-        key="session",
+        key="auth_session",
         value=cookie,
         max_age=60 * 60 * 24 * 7,
         httponly=True,
@@ -89,5 +89,5 @@ async def callback(
 
 @router.post("/logout")
 async def logout(response: Response) -> dict[str, str]:
-    response.delete_cookie("session")
+    response.delete_cookie("auth_session", path="/")
     return {"message": "Logged out"}

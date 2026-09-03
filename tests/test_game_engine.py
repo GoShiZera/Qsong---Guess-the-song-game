@@ -40,7 +40,13 @@ VALID_PLAYLIST_ID = "37i9dQZF1DXcBWIGoYBM5M"
 def _get_cookie(resp: object) -> str | None:
     set_cookie = resp.headers.get("set-cookie")
     if set_cookie:
-        return set_cookie.split(";")[0]
+        # Extract just the cookie value part (before the first semicolon)
+        # Format: "game_session=abc123; Path=/; ..."
+        parts = set_cookie.split(";")
+        cookie_part = parts[0].strip()
+        # Extract value after '='
+        if "=" in cookie_part:
+            return cookie_part.split("=", 1)[1]
     return None
 
 
@@ -83,11 +89,7 @@ async def _complete_round(
     return resp.json()
 
 
-def _setup_mocks(
-    mock_fetch: MagicMock,
-    mock_match: MagicMock,
-    tracks: list[PlayableTrack],
-) -> None:
+def _setup_mocks(mock_fetch: MagicMock, mock_match: MagicMock, tracks: list[PlayableTrack]) -> None:
     mock_fetch.return_value = _make_mock_obj(tracks)
     mock_match.return_value = tracks
 
@@ -120,7 +122,7 @@ async def test_full_game_flow(sample_pool: list[PlayableTrack]) -> None:
 
             cookie = _get_cookie(resp)
             assert cookie is not None
-            headers = {"Cookie": cookie}
+            headers = {"Cookie": f"game_session={cookie}"}
 
             for i in range(3):
                 resp = await client.post("/round/start", headers=headers)
@@ -170,7 +172,7 @@ async def test_correct_guess_ends_round_early() -> None:
             )
             assert resp.status_code == 200
             cookie = _get_cookie(resp)
-            headers = {"Cookie": cookie}
+            headers = {"Cookie": f"game_session={cookie}"}
 
             resp = await client.post("/round/start", headers=headers)
             assert resp.status_code == 200
@@ -196,20 +198,24 @@ async def test_game_over_after_rounds(sample_pool: list[PlayableTrack]) -> None:
             )
             assert resp.status_code == 200
             cookie = _get_cookie(resp)
-            headers = {"Cookie": cookie}
+            headers = {"Cookie": f"game_session={cookie}"}
 
+            # Round 1
             resp = await client.post("/round/start", headers=headers)
             assert resp.status_code == 200
             await _complete_round(client, headers, False, sample_pool[0].name)
 
+            # Round 2
             resp = await client.post("/round/start", headers=headers)
             assert resp.status_code == 200
             await _complete_round(client, headers, False, sample_pool[1].name)
 
+            # Game over - next round/start should fail
             resp = await client.post("/round/start", headers=headers)
             assert resp.status_code == 400
             assert "finalizada" in resp.json()["detail"]
 
+            # Summary should work
             resp = await client.get("/game/summary", headers=headers)
             assert resp.status_code == 200
             summary = resp.json()
@@ -258,12 +264,13 @@ async def test_clip_duration_progression() -> None:
             assert resp.status_code == 200
             cookie = _get_cookie(resp)
             assert cookie is not None
-            headers = {"Cookie": cookie}
+            headers = {"Cookie": f"game_session={cookie}"}
 
             resp = await client.post("/round/start", headers=headers)
             assert resp.status_code == 200
             assert resp.json()["clip_duration_ms"] == 100
 
+            # Wrong guesses should progress through clip durations
             expected_durations = [200, 400, 800, 1600, 2000, 2500]
             for expected in expected_durations:
                 resp = await client.post(
@@ -292,7 +299,7 @@ async def test_round_history_detail(sample_pool: list[PlayableTrack]) -> None:
             assert resp.status_code == 200
             cookie = _get_cookie(resp)
             assert cookie is not None
-            headers = {"Cookie": cookie}
+            headers = {"Cookie": f"game_session={cookie}"}
 
             resp = await client.post("/round/start", headers=headers)
             for i in range(3):

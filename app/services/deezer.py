@@ -87,6 +87,9 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
     playable: list[PlayableTrack] = []
 
     # 1. Use Spotify preview directly for tracks that have it
+    # Use negative IDs to distinguish Spotify-sourced tracks
+    # (avoid collision with Deezer IDs which are positive)
+    spotify_id_counter = -1
     for st in tracks_with_spotify_preview:
         playable.append(
             PlayableTrack(
@@ -94,9 +97,10 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                 artist=st.artist,
                 preview_url=st.preview_url or "",
                 duration_ms=st.duration_ms,
-                deezer_id=0,  # 0 indicates from Spotify directly
+                deezer_id=spotify_id_counter,
             )
         )
+        spotify_id_counter -= 1
 
     # 2. For tracks without Spotify preview, search Deezer
     if tracks_without_preview:

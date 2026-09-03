@@ -7,11 +7,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
+from app.config import settings
 from app.game_state import deserialize_session
 from app.routes import auth, game
 
 app = FastAPI()
-app.add_middleware(HTTPSRedirectMiddleware)
+if settings.cookie_secure:
+    app.add_middleware(HTTPSRedirectMiddleware)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -30,7 +32,7 @@ async def session_middleware(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
-    cookie = request.cookies.get("session")
+    cookie = request.cookies.get("auth_session")
     request.state.session = deserialize_session(cookie) if cookie else {}
     response = await call_next(request)
     return response

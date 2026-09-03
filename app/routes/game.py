@@ -1,7 +1,7 @@
 import random
 import re
 import unicodedata
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
@@ -98,12 +98,12 @@ async def game_start(
 
     session_id = create_game_session(state)
     response.set_cookie(
-        key="session",
+        key="game_session",
         value=session_id,
         max_age=60 * 60 * 24 * 7,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="none",
+        samesite="lax",
         path="/",
     )
 
@@ -136,9 +136,9 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
     state.start_offset_ms = start_offset
     state.attempt = 0
     state.guess_history = []
-    state.updated_at = datetime.utcnow()
+    state.updated_at = datetime.now(UTC)
 
-    session_id = request.cookies.get("session")
+    session_id = request.cookies.get("game_session")
     assert session_id is not None
     update_game_session(session_id, state)
 
@@ -178,7 +178,7 @@ async def round_guess(
                 track=revealed_track,
                 guesses=state.guess_history.copy(),
                 correct=correct,
-                completed_at=datetime.utcnow(),
+                completed_at=datetime.now(UTC),
             )
         )
         state.round_atual += 1
@@ -186,15 +186,17 @@ async def round_guess(
         state.attempt = 0
         state.guess_history = []
         game_over = state.round_atual >= state.rounds_total
-        revealed: dict[str, Any] | None = revealed_track.model_dump() if revealed_track else None
+        revealed: dict[str, Any] | None = (
+            revealed_track.model_dump() if revealed_track else None
+        )
     else:
         state.attempt += 1
         game_over = False
         revealed = None
 
-    state.updated_at = datetime.utcnow()
+    state.updated_at = datetime.now(UTC)
 
-    session_id = request.cookies.get("session")
+    session_id = request.cookies.get("game_session")
     assert session_id is not None
     update_game_session(session_id, state)
 
@@ -213,7 +215,62 @@ async def round_guess(
 
 @router.post("/round/skip")
 async def round_skip(request: Request, response: Response) -> dict[str, Any]:
-    return await round_guess(request, response, guess="")
+    state = await _get_game_state(request)
+    if state is None or state.current_track is None:
+        raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
+
+    # Skip just advances the attempt without checking correctness
+    clip_duration = CLIP_DURATIONS[state.attempt]
+    state.guess_history.append(
+        GuessRecord(
+            attempt=state.attempt + 1,
+            guess="",
+            correct=False,
+            clip_duration_ms=clip_duration,
+        )
+    )
+
+    if state.attempt >= 6:
+        # Round ends after 7 attempts (0-indexed, so attempt 6 is the 7th)
+        state.round_history.append(
+            RoundResult(
+                track=state.current_track,
+                guesses=state.guess_history.copy(),
+                correct=False,
+                completed_at=datetime.now(UTC),
+            )
+        )
+        revealed_track = state.current_track
+        state.round_atual += 1
+        state.current_track = None
+        state.attempt = 0
+        state.guess_history = []
+        game_over = state.round_atual >= state.rounds_total
+        revealed: dict[str, Any] | None = (
+            revealed_track.model_dump() if revealed_track else None
+        )
+    else:
+        state.attempt += 1
+        game_over = False
+        revealed = None
+
+    state.updated_at = datetime.now(UTC)
+
+    session_id = request.cookies.get("game_session")
+    assert session_id is not None
+    update_game_session(session_id, state)
+
+    result: dict[str, Any] = {
+        "correct": False,
+        "attempt": state.attempt,
+        "game_over": game_over,
+    }
+    if state.attempt < 7 and not game_over:
+        result["next_clip_duration_ms"] = CLIP_DURATIONS[state.attempt]
+    if revealed:
+        result["revealed_track"] = revealed
+
+    return result
 
 
 @router.get("/game/summary")
@@ -233,7 +290,7 @@ async def game_summary(request: Request) -> dict[str, Any]:
 
 
 async def _get_game_state(request: Request) -> GameState | None:
-    session_id = request.cookies.get("session")
+    session_id = request.cookies.get("game_session")
     if not session_id:
         return None
     return get_game_session(session_id)

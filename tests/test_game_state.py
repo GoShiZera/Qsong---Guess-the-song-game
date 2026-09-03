@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from _pytest.monkeypatch import MonkeyPatch
 
@@ -62,7 +62,7 @@ def test_game_state_session_store() -> None:
                 track=track,
                 guesses=[],
                 correct=True,
-                completed_at=datetime.utcnow(),
+                completed_at=datetime.now(UTC),
             )
         ],
     )
