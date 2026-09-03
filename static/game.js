@@ -67,6 +67,9 @@
         playlistsError: document.getElementById('playlists-error'),
         playlistsList: document.getElementById('playlists-list'),
         roundsInputSelect: document.getElementById('rounds-input-select'),
+        selectUrlForm: document.getElementById('select-url-form'),
+        selectPlaylistInput: document.getElementById('select-playlist-input'),
+        btnStartSelectUrl: document.getElementById('btn-start-select-url'),
 
         // Game
         scoreCorrect: document.getElementById('score-correct'),
@@ -89,6 +92,12 @@
         // Guess Log
         guessLog: document.getElementById('guess-log'),
         guessLogList: document.getElementById('guess-log-list'),
+
+        // Back Home Modal
+        btnBackHome: document.getElementById('btn-back-home'),
+        modalConfirmBack: document.getElementById('modal-confirm-back'),
+        modalBtnCancel: document.getElementById('modal-btn-cancel'),
+        modalBtnConfirm: document.getElementById('modal-btn-confirm'),
 
         // Summary
         finalCorrect: document.getElementById('final-correct'),
@@ -146,6 +155,28 @@
             els.progressBar.style.setProperty('--progress', `${percent}%`);
         }
         if (els.progressText) els.progressText.textContent = text;
+    };
+
+    // ---------- Modal Confirm Back Home ----------
+    const showConfirmBackModal = () => {
+        stopAudio();
+        if (els.modalConfirmBack) {
+            els.modalConfirmBack.hidden = false;
+            els.modalBtnCancel?.focus();
+        }
+    };
+
+    const hideConfirmBackModal = () => {
+        if (els.modalConfirmBack) {
+            els.modalConfirmBack.hidden = true;
+        }
+    };
+
+    const confirmBackHome = () => {
+        hideConfirmBackModal();
+        stopAudio();
+        // Redireciona a página para a URL raiz limpa
+        window.location.href = '/';
     };
 
     // ---------- Audio (Web Audio API) ----------
@@ -353,6 +384,13 @@
             const params = new URLSearchParams({ playlist_id: playlistId });
             if (rounds) params.set('rounds', rounds.toString());
             const res = await fetch(`${API_BASE}/game/start?${params}`, {
+                credentials: 'include',
+            });
+            return handleResponse(res);
+        },
+
+        async getUserProfile() {
+            const res = await fetch(`${API_BASE}/user/profile`, {
                 credentials: 'include',
             });
             return handleResponse(res);
@@ -761,21 +799,10 @@
             const attemptDisplayNumber = state.attempt;
             addGuessToLog(attemptDisplayNumber, guessText, data.correct, false);
 
-            showRoundResult(data, trackName);
-
-            if (data.correct) {
-                state.correctCount++;
-                state.roundHistory.push({ ...data, track: state.currentTrack, correct: true });
-            } else if (data.attempt >= MAX_ATTEMPTS || data.game_over) {
-                state.wrongCount++;
-                state.roundHistory.push({ ...data, track: state.currentTrack, correct: false });
-            }
-
-            updateScoreDisplay();
-
             // Check if round is over using explicit round_over flag or revealed_track
             const isRoundOver = data.round_over || Boolean(data.revealed_track);
-            if (data.correct || isRoundOver) {
+            
+            if (data.correct || data.attempt >= MAX_ATTEMPTS || data.game_over) {
                 state.roundNumber++;
                 if (data.game_over || state.roundNumber > state.totalRounds) {
                     setTimeout(() => finishGame(), 2000);
@@ -789,6 +816,15 @@
                     els.guessInput.focus();
                     await playClip(state.currentTrack.preview_url, state.startOffset, data.next_clip_duration_ms);
                 }, 1500);
+            }
+
+            updateScoreDisplay();
+
+            // Only show round result when round is over
+            if (data.correct || isRoundOver) {
+                showRoundResult(data, trackName);
+            } else {
+                hideRoundResult();
             }
 
         } catch (err) {
@@ -814,14 +850,10 @@
             const attemptDisplayNumber = state.attempt;
             addGuessToLog(attemptDisplayNumber, '', false, true);
 
-            showRoundResult(data, trackName);
-            state.wrongCount++;
-            state.roundHistory.push({ ...data, track: state.currentTrack, correct: false });
-            updateScoreDisplay();
-
             // Check if round is over using explicit round_over flag or revealed_track
             const isRoundOver = data.round_over || Boolean(data.revealed_track);
             if (isRoundOver) {
+                showRoundResult(data, trackName);
                 state.roundNumber++;
                 if (data.game_over || state.roundNumber > state.totalRounds) {
                     setTimeout(() => finishGame(), 1500);
@@ -867,6 +899,24 @@
         els.playlistsLoading.hidden = false;
         els.playlistsError.hidden = true;
         els.playlistsList.hidden = true;
+        // Carregar dados de perfil do usuário
+        try {
+            const profile = await api.getUserProfile();
+            if (profile) {
+                els.userProfile.hidden = false;
+                els.userName.textContent = profile.display_name;
+                if (profile.avatar_url) {
+                    els.userAvatar.src = profile.avatar_url;
+                    els.userAvatar.style.display = 'block';
+                } else {
+                    // Fallback para ícone genérico se o usuário não tiver foto
+                    els.userAvatar.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23b3b3b3'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+                }
+            }
+        } catch (err) {
+            console.warn('Erro ao carregar perfil do usuário:', err);
+        }
+        // Carregar lista de playlists
         try {
             const playlists = await api.getUserPlaylists();
             renderPlaylists(playlists);
@@ -924,6 +974,17 @@
             });
         }
 
+        // URL form (para usuários logados jogarem com link direto)
+        els.selectUrlForm?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const playlist = els.selectPlaylistInput.value.trim();
+            if (playlist) startNewGame(playlist, null);
+        });
+
+        els.selectPlaylistInput?.addEventListener('input', () => {
+            els.btnStartSelectUrl.disabled = !els.selectPlaylistInput.value.trim();
+        });
+
         // Game controls
         els.btnPlayPause.addEventListener('click', togglePlayPause);
         els.btnGuess.addEventListener('click', (e) => {
@@ -956,6 +1017,23 @@
             hideError(els.setupError);
             showView('setup');
             els.playlistInput.focus();
+        });
+
+        // Back Home Modal
+        els.btnBackHome?.addEventListener('click', showConfirmBackModal);
+        els.modalBtnCancel?.addEventListener('click', hideConfirmBackModal);
+        els.modalBtnConfirm?.addEventListener('click', confirmBackHome);
+        // Fechar modal com tecla Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && els.modalConfirmBack && !els.modalConfirmBack.hidden) {
+                hideConfirmBackModal();
+            }
+        });
+        // Fechar clicando no fundo escuro (fora do card)
+        els.modalConfirmBack?.addEventListener('click', (e) => {
+            if (e.target === els.modalConfirmBack) {
+                hideConfirmBackModal();
+            }
         });
 
         // Keyboard shortcuts

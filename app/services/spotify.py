@@ -91,7 +91,7 @@ def get_auth_url(state: str | None = None) -> str:
         "client_id": settings.spotify_client_id,
         "response_type": "code",
         "redirect_uri": settings.spotify_redirect_uri,
-        "scope": "playlist-read-private playlist-read-collaborative",
+        "scope": "playlist-read-private playlist-read-collaborative user-read-private user-library-read",
         "show_dialog": "true",
     }
     if state:
@@ -129,6 +129,25 @@ async def _call_spotify_with_user_token(
     return resp, new_access_token, new_refresh_token
 
 
+async def fetch_user_profile(
+    access_token: str, refresh_token: str | None = None
+) -> dict[str, Any]:
+    """Fetch authenticated user's profile info (name, avatar)."""
+    url = "https://api.spotify.com/v1/me"
+    resp, new_access, new_refresh = await _call_spotify_with_user_token(
+        access_token, refresh_token, "GET", url
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    images = data.get("images", [])
+    avatar_url = images[0].get("url") if images else None
+    return {
+        "id": data.get("id"),
+        "display_name": data.get("display_name") or "Usuário Spotify",
+        "avatar_url": avatar_url,
+    }
+
+
 async def fetch_user_playlists(
     access_token: str, refresh_token: str | None = None
 ) -> list[dict[str, Any]]:
@@ -151,16 +170,38 @@ async def fetch_user_playlists(
         resp.raise_for_status()
         data = resp.json()
         for pl in data.get("items", []):
-            if pl.get("tracks", {}).get("total", 0) > 0:
-                items.append({
-                    "id": pl["id"],
-                    "name": pl["name"],
-                    "owner": pl["owner"]["display_name"],
-                    "tracks_total": pl["tracks"]["total"],
-                    "public": pl["public"],
-                    "images": pl.get("images", []),
-                })
+            if not pl:
+                continue
+            tracks_info = pl.get("tracks")
+            total = tracks_info.get("total", 0) if isinstance(tracks_info, dict) else 0
+            items.append({
+                "id": pl["id"],
+                "name": pl.get("name", "Playlist sem nome"),
+                "owner": pl.get("owner", {}).get("display_name", "Spotify"),
+                "tracks_total": total,
+                "public": pl.get("public", False),
+                "images": pl.get("images", []),
+            })
         url = data.get("next")
+    # Check for Liked Songs (Músicas Curtidas)
+    try:
+        liked_resp, _, _ = await _call_spotify_with_user_token(
+            current_access, current_refresh, "GET", "https://api.spotify.com/v1/me/tracks?limit=1"
+        )
+        if liked_resp.status_code == 200:
+            liked_data = liked_resp.json()
+            liked_total = liked_data.get("total", 0)
+            if liked_total > 0:
+                items.insert(0, {
+                    "id": "me:liked",
+                    "name": "Músicas Curtidas (Liked Songs)",
+                    "owner": "Você",
+                    "tracks_total": liked_total,
+                    "public": False,
+                    "images": [],
+                })
+    except Exception:
+        pass
     return items
 
 
@@ -212,12 +253,40 @@ async def _fetch_spotify_items(
     return tracks
 
 
+async def fetch_user_profile(
+    access_token: str, refresh_token: str | None = None
+) -> dict[str, Any]:
+    """Fetch authenticated user's profile info (name, avatar)."""
+    url = "https://api.spotify.com/v1/me"
+    resp, new_access, new_refresh = await _call_spotify_with_user_token(
+        access_token, refresh_token, "GET", url
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    images = data.get("images", [])
+    avatar_url = images[0].get("url") if images else None
+    return {
+        "id": data.get("id"),
+        "display_name": data.get("display_name") or "Usuário Spotify",
+        "avatar_url": avatar_url,
+    }
+
+
 async def fetch_playlist_tracks(
     playlist_id: str,
     access_token: str | None = None,
     refresh_token: str | None = None,
 ) -> list[SpotifyTrack]:
     """Fetch tracks from a playlist. Uses user token if provided, else app token."""
+    # Handle special "Liked Songs" playlist
+    if playlist_id == "me:liked":
+        if not access_token:
+            raise ValueError("Acesso a Músicas Curtidas requer autenticação do usuário")
+        token = access_token
+        use_refresh = refresh_token
+        url = "https://api.spotify.com/v1/me/tracks?limit=50"
+        return await _fetch_spotify_items(url, token, use_refresh)
+
     if access_token:
         token = access_token
         use_refresh = refresh_token

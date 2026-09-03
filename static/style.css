@@ -1132,6 +1132,84 @@ input::placeholder {
     }
 }
 
+/* ===== Botão Voltar (.btn-back) ===== */
+.btn-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.btn-back:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    transform: scale(1.05);
+}
+
+.btn-back:focus-visible {
+    outline: 2px solid var(--accent-green);
+    outline-offset: 2px;
+}
+
+/* ===== Botão de Play (.btn-play) ===== */
+.btn-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    background: var(--accent-green);
+    border: none;
+    border-radius: var(--radius-full);
+    color: #000;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.btn-play:not(:disabled):hover {
+    background: var(--accent-green-hover);
+    transform: scale(1.06);
+}
+
+.btn-play:not(:disabled):active {
+    transform: scale(0.96);
+}
+
+.btn-play:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ===== Botões do Modal de Confirmação ===== */
+.modal-actions .btn {
+    padding: 12px 20px;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.btn-danger {
+    background: var(--accent-red);
+    color: #ffffff;
+    border: none;
+}
+
+.btn-danger:hover {
+    background: #d32f2f;
+    transform: scale(1.02);
+}
+
 /* Print */
 @media print {
     .btn, .guess-form, .player-controls, .attempts-tracker {

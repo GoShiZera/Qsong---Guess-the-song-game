@@ -14,7 +14,7 @@ from app.game_state import (
 )
 from app.models import GameState, GuessRecord, RoundResult
 from app.services.deezer import match_spotify_to_deezer
-from app.services.spotify import fetch_album_tracks, fetch_playlist_tracks, fetch_user_playlists
+from app.services.spotify import fetch_album_tracks, fetch_playlist_tracks, fetch_user_playlists, fetch_user_profile
 
 router = APIRouter()
 
@@ -65,11 +65,17 @@ async def game_start(
 
     spotify_id, resource_type = extracted
 
+    # Get user tokens if available (for private playlists and Liked Songs)
+    session = getattr(request.state, "session", {})
+    user_tokens = session.get("user_tokens")
+    access_token = user_tokens.get("access_token") if user_tokens else None
+    refresh_token = user_tokens.get("refresh_token") if user_tokens else None
+
     try:
         if resource_type == "album":
-            spotify_tracks = await fetch_album_tracks(spotify_id)
+            spotify_tracks = await fetch_album_tracks(spotify_id, access_token, refresh_token)
         else:
-            spotify_tracks = await fetch_playlist_tracks(spotify_id)
+            spotify_tracks = await fetch_playlist_tracks(spotify_id, access_token, refresh_token)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
     except Exception:
@@ -306,6 +312,39 @@ async def _get_game_state(request: Request) -> GameState | None:
     if not session_id:
         return None
     return get_game_session(session_id)
+
+
+@router.get("/game/summary")
+async def game_summary(request: Request) -> dict[str, Any]:
+    state = await _get_game_state(request)
+    if state is None:
+        raise HTTPException(status_code=400, detail="Sessão inválida ou expirada")
+
+    acertos = sum(1 for r in state.round_history if r.correct)
+    erros = len(state.round_history) - acertos
+
+    return {
+        "acertos": acertos,
+        "erros": erros,
+        "rounds": [r.model_dump() for r in state.round_history],
+    }
+
+
+@router.get("/user/profile")
+async def get_user_profile_route(request: Request) -> dict[str, Any]:
+    session = getattr(request.state, "session", {})
+    user_tokens = session.get("user_tokens")
+    if not user_tokens:
+        raise HTTPException(status_code=401, detail="Não autenticado")
+
+    access_token = user_tokens.get("access_token")
+    refresh_token = user_tokens.get("refresh_token")
+
+    try:
+        profile = await fetch_user_profile(access_token, refresh_token)
+        return profile
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao buscar perfil: {e}") from None
 
 
 @router.get("/user/playlists")

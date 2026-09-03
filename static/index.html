@@ -69,14 +69,32 @@
         <section id="view-select-playlist" class="view" aria-label="Selecionar playlist" hidden>
             <header class="view-header">
                 <h1>Escolha sua Playlist</h1>
-                <p class="subtitle">Suas playlists do Spotify</p>
+                <p class="subtitle">Jogue com suas playlists ou cole um link</p>
             </header>
             
             <div id="user-profile" class="user-profile" hidden>
-                <img id="user-avatar" src="" alt="" width="48" height="48">
-                <span id="user-name"></span>
+                <img id="user-avatar" src="" alt="Foto de perfil" width="48" height="48" class="user-avatar">
+                <span id="user-name">Carregando...</span>
                 <button type="button" id="btn-logout" class="btn btn-ghost btn-sm">Sair</button>
             </div>
+            <!-- Opção 1: Jogar via Link/URL mesmo logado -->
+            <form id="select-url-form" class="setup-form">
+                <div class="form-group">
+                    <label for="select-playlist-input">Playlist/Álbum do Spotify (URL ou ID)</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input 
+                            type="text" 
+                            id="select-playlist-input" 
+                            placeholder="https://open.spotify.com/playlist/... ou ID"
+                            autocomplete="off"
+                        >
+                        <button type="submit" id="btn-start-select-url" class="btn btn-primary" style="width: auto; padding: 10px 20px;" disabled>
+                            Jogar
+                        </button>
+                    </div>
+                </div>
+            </form>
+            <p class="divider">ou escolha uma de suas playlists</p>
             
             <div id="playlists-loading" class="progress-container" hidden>
                 <div class="progress-bar" role="progressbar"></div>
@@ -88,17 +106,6 @@
             <ul id="playlists-list" class="playlists-list" hidden>
                 <!-- Playlists carregadas via JS -->
             </ul>
-            
-            <div class="form-group" hidden>
-                <label for="rounds-input-select">Número de rodadas (opcional)</label>
-                <input 
-                    type="number" 
-                    id="rounds-input-select" 
-                    min="1" 
-                    max="50"
-                    placeholder="Máximo = faixas disponíveis"
-                >
-            </div>
         </section>
         
         <!-- View 2: Jogo -->
