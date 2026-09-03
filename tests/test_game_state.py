@@ -3,10 +3,12 @@ from datetime import datetime
 from _pytest.monkeypatch import MonkeyPatch
 
 from app.game_state import (
-    deserialize_game_state,
+    create_game_session,
+    delete_game_session,
     deserialize_session,
-    serialize_game_state,
+    get_game_session,
     serialize_session,
+    update_game_session,
 )
 from app.models import GameState, GuessRecord, PlayableTrack, RoundResult
 
@@ -35,7 +37,7 @@ def test_session_expired_returns_none(monkeypatch: MonkeyPatch) -> None:
     assert deserialize_session("invalid.cookie.value") is None
 
 
-def test_game_state_serialization_roundtrip() -> None:
+def test_game_state_session_store() -> None:
     track = PlayableTrack(
         name="Test Song",
         artist="Test Artist",
@@ -65,8 +67,9 @@ def test_game_state_serialization_roundtrip() -> None:
         ],
     )
 
-    cookie = serialize_game_state(state)
-    restored = deserialize_game_state(cookie)
+    # Test create and get session
+    session_id = create_game_session(state)
+    restored = get_game_session(session_id)
 
     assert restored is not None
     assert restored.playlist_id == "playlist123"
@@ -79,7 +82,7 @@ def test_game_state_serialization_roundtrip() -> None:
     assert len(restored.round_history) == 1
 
 
-def test_game_state_tampering_returns_none() -> None:
+def test_game_state_update_session() -> None:
     track = PlayableTrack(
         name="Test",
         artist="Artist",
@@ -88,16 +91,32 @@ def test_game_state_tampering_returns_none() -> None:
         deezer_id=1,
     )
     state = GameState(playlist_id="p1", pool=[track], rounds_total=1)
-    cookie = serialize_game_state(state)
-    tampered = cookie[:-5] + "xxxxx"
-    assert deserialize_game_state(tampered) is None
+    session_id = create_game_session(state)
+
+    # Update the state
+    state.round_atual = 1
+    update_game_session(session_id, state)
+
+    restored = get_game_session(session_id)
+    assert restored is not None
+    assert restored.round_atual == 1
 
 
-def test_game_state_invalid_json_returns_none() -> None:
-    from itsdangerous import TimestampSigner
+def test_game_state_delete_session() -> None:
+    track = PlayableTrack(
+        name="Test",
+        artist="Artist",
+        preview_url="https://example.com/preview.mp3",
+        duration_ms=180000,
+        deezer_id=1,
+    )
+    state = GameState(playlist_id="p1", pool=[track], rounds_total=1)
+    session_id = create_game_session(state)
 
-    from app.config import settings
+    # Delete the session
+    result = delete_game_session(session_id)
+    assert result is True
 
-    signer = TimestampSigner(settings.session_secret)
-    invalid_cookie = signer.sign(b"not json").decode()
-    assert deserialize_game_state(invalid_cookie) is None
+    # Verify it's deleted
+    restored = get_game_session(session_id)
+    assert restored is None

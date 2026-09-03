@@ -7,7 +7,11 @@ from typing import Any
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 
 from app.config import settings
-from app.game_state import deserialize_game_state, serialize_game_state
+from app.game_state import (
+    create_game_session,
+    get_game_session,
+    update_game_session,
+)
 from app.models import GameState, GuessRecord, RoundResult
 from app.services.deezer import match_spotify_to_deezer
 from app.services.spotify import fetch_album_tracks, fetch_playlist_tracks, fetch_user_playlists
@@ -92,14 +96,15 @@ async def game_start(
         rounds_total=rounds_total,
     )
 
-    cookie = serialize_game_state(state)
+    session_id = create_game_session(state)
     response.set_cookie(
         key="session",
-        value=cookie,
+        value=session_id,
         max_age=60 * 60 * 24 * 7,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite="none",
+        path="/",
     )
 
     return {
@@ -133,16 +138,9 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
     state.guess_history = []
     state.updated_at = datetime.utcnow()
 
-    cookie = serialize_game_state(state)
-    response.set_cookie(
-        key="session",
-        value=cookie,
-        max_age=60 * 60 * 24 * 7,
-        httponly=True,
-        secure=settings.cookie_secure,
-        samesite="none",
-        path="/",
-    )
+    session_id = request.cookies.get("session")
+    assert session_id is not None
+    update_game_session(session_id, state)
 
     return {
         "preview_url": track.preview_url,
@@ -196,15 +194,9 @@ async def round_guess(
 
     state.updated_at = datetime.utcnow()
 
-    cookie = serialize_game_state(state)
-    response.set_cookie(
-        key="session",
-        value=cookie,
-        max_age=60 * 60 * 24 * 7,
-        httponly=True,
-        secure=settings.cookie_secure,
-        samesite="lax",
-    )
+    session_id = request.cookies.get("session")
+    assert session_id is not None
+    update_game_session(session_id, state)
 
     result: dict[str, Any] = {
         "correct": correct,
@@ -241,10 +233,10 @@ async def game_summary(request: Request) -> dict[str, Any]:
 
 
 async def _get_game_state(request: Request) -> GameState | None:
-    cookie = request.cookies.get("session")
-    if not cookie:
+    session_id = request.cookies.get("session")
+    if not session_id:
         return None
-    return deserialize_game_state(cookie)
+    return get_game_session(session_id)
 
 
 @router.get("/user/playlists")
