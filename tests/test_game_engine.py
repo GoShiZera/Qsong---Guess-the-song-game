@@ -40,11 +40,8 @@ VALID_PLAYLIST_ID = "37i9dQZF1DXcBWIGoYBM5M"
 def _get_cookie(resp: object) -> str | None:
     set_cookie = resp.headers.get("set-cookie")
     if set_cookie:
-        # Extract just the cookie value part (before the first semicolon)
-        # Format: "game_session=abc123; Path=/; ..."
         parts = set_cookie.split(";")
         cookie_part = parts[0].strip()
-        # Extract value after '='
         if "=" in cookie_part:
             return cookie_part.split("=", 1)[1]
     return None
@@ -68,8 +65,8 @@ async def _complete_round(
     correct: bool,
     track_name: str,
 ) -> dict:
-    """Complete a round by making 7 attempts (6 wrong + 1 correct/skip)."""
-    for attempt in range(6):
+    """Complete a round by making 5 attempts (4 wrong + 1 correct/skip)."""
+    for attempt in range(4):
         resp = await client.post(
             "/round/guess",
             headers=headers,
@@ -119,15 +116,15 @@ async def test_full_game_flow(sample_pool: list[PlayableTrack]) -> None:
             assert data["total"] == 3
             assert data["rounds_total"] == 3
             assert len(data["tracks"]) == 3
-
             cookie = _get_cookie(resp)
             assert cookie is not None
+
             headers = {"Cookie": f"game_session={cookie}"}
 
             for i in range(3):
                 resp = await client.post("/round/start", headers=headers)
                 assert resp.status_code == 200
-                assert resp.json()["clip_duration_ms"] == 100
+                assert resp.json()["clip_duration_ms"] == 400
 
                 track_name = sample_pool[i].name
                 resp = await _complete_round(client, headers, False, track_name)
@@ -268,10 +265,10 @@ async def test_clip_duration_progression() -> None:
 
             resp = await client.post("/round/start", headers=headers)
             assert resp.status_code == 200
-            assert resp.json()["clip_duration_ms"] == 100
+            assert resp.json()["clip_duration_ms"] == 400
 
             # Wrong guesses should progress through clip durations
-            expected_durations = [200, 400, 800, 1600, 2000, 2500]
+            expected_durations = [800, 1600, 2000, 2500]
             for expected in expected_durations:
                 resp = await client.post(
                     "/round/guess",
@@ -280,7 +277,7 @@ async def test_clip_duration_progression() -> None:
                 )
                 assert resp.status_code == 200
                 data = resp.json()
-                if data["attempt"] < 6:
+                if data["attempt"] < 4:
                     assert data["next_clip_duration_ms"] == expected
 
 
@@ -310,13 +307,22 @@ async def test_round_history_detail(sample_pool: list[PlayableTrack]) -> None:
                 )
                 assert resp.status_code == 200
 
-            for i in range(4):
+            for i in range(1):
                 resp = await client.post(
                     "/round/guess",
                     headers=headers,
                     json={"guess": f"Wrong {i + 3}"},
                 )
                 assert resp.status_code == 200
+
+            # Now 4 wrong guesses (0-3), one more attempt left (attempt 4)
+            # Make the 5th wrong guess to complete the round
+            resp = await client.post(
+                "/round/guess",
+                headers=headers,
+                json={"guess": "Wrong 4"},
+            )
+            assert resp.status_code == 200
 
             assert resp.json()["correct"] is False
             assert "revealed_track" in resp.json()
@@ -330,7 +336,7 @@ async def test_round_history_detail(sample_pool: list[PlayableTrack]) -> None:
             assert "guesses" in round_data
             assert "correct" in round_data
             assert "completed_at" in round_data
-            assert len(round_data["guesses"]) == 7
+            assert len(round_data["guesses"]) == 5
             assert round_data["guesses"][0]["attempt"] == 1
-            assert round_data["guesses"][6]["attempt"] == 7
+            assert round_data["guesses"][4]["attempt"] == 5
             assert round_data["correct"] is False

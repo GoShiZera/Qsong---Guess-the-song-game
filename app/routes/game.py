@@ -20,7 +20,7 @@ router = APIRouter()
 
 PLAYLIST_ID_REGEX = re.compile(r"playlist/([a-zA-Z0-9]{22})")
 ALBUM_ID_REGEX = re.compile(r"album/([a-zA-Z0-9]{22})")
-CLIP_DURATIONS = [100, 200, 400, 800, 1600, 2000, 2500]
+CLIP_DURATIONS = [400, 800, 1600, 2000, 2500]
 
 
 def extract_spotify_id(input_str: str) -> tuple[str, str] | None:
@@ -180,7 +180,7 @@ async def round_guess(
     )
 
     # Determine if round is over
-    round_over = correct or state.attempt >= 6
+    round_over = correct or state.attempt >= 4
     attempt_number = state.attempt + 1
 
     if round_over:
@@ -244,7 +244,7 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
     )
 
     # Determine if round is over
-    round_over = state.attempt >= 6
+    round_over = state.attempt >= 4
     attempt_number = state.attempt + 1
 
     if round_over:

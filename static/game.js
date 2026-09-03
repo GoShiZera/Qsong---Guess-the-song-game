@@ -7,8 +7,8 @@
     'use strict';
 
     // ---------- Constants ----------
-    const CLIP_DURATIONS = [100, 200, 400, 800, 1600, 2000, 2500];
-    const MAX_ATTEMPTS = 7;
+    const CLIP_DURATIONS = [400, 800, 1600, 2000, 2500];
+    const MAX_ATTEMPTS = 5;
     const API_BASE = '';
 
     // ---------- State ----------
@@ -88,6 +88,10 @@
         btnGuess: document.getElementById('btn-guess'),
         btnSkip: document.getElementById('btn-skip'),
         roundResult: document.getElementById('round-result'),
+
+        // HUD Clip Info
+        clipAttemptLabel: document.getElementById('clip-attempt-label'),
+        clipDurationLabel: document.getElementById('clip-duration-label'),
 
         // Guess Log
         guessLog: document.getElementById('guess-log'),
@@ -376,6 +380,16 @@
             pauseIcon.hidden = !playing;
         }
         els.btnPlayPause.setAttribute('aria-label', playing ? 'Pausar' : 'Tocar');
+    };
+
+    const updateClipInfo = (attemptNumber, durationMs) => {
+        if (els.clipAttemptLabel) {
+            els.clipAttemptLabel.textContent = `Tentativa ${attemptNumber}/5`;
+        }
+        if (els.clipDurationLabel) {
+            const durationSec = (durationMs / 1000).toFixed(1);
+            els.clipDurationLabel.textContent = `Trecho: ${durationSec}s`;
+        }
     };
 
     // ---------- API Calls ----------
@@ -773,6 +787,7 @@
             els.guessInput.focus();
 
             await playClip(data.preview_url, data.start_time_ms, data.clip_duration_ms);
+            updateClipInfo(1, data.clip_duration_ms);
 
         } catch (err) {
             console.error('Start round error:', err);
@@ -814,6 +829,7 @@
                     setGameControlsEnabled(true);
                     els.guessInput.value = '';
                     els.guessInput.focus();
+                    updateClipInfo(state.attempt + 1, data.next_clip_duration_ms);
                     await playClip(state.currentTrack.preview_url, state.startOffset, data.next_clip_duration_ms);
                 }, 1500);
             }
@@ -865,6 +881,7 @@
                     setGameControlsEnabled(true);
                     els.guessInput.value = '';
                     els.guessInput.focus();
+                    updateClipInfo(state.attempt + 1, data.next_clip_duration_ms);
                     await playClip(state.currentTrack.preview_url, state.startOffset, data.next_clip_duration_ms);
                 }, 1000);
             }
