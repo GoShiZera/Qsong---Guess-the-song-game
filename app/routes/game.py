@@ -129,7 +129,9 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Nenhuma faixa com preview disponível")
 
     track = random.choice(available)
-    max_offset = max(0, track.duration_ms - 2500)
+    # Fix: use preview duration (max 30s = 30000ms) instead of full track duration
+    preview_duration = min(track.duration_ms, 30000)
+    max_offset = max(0, preview_duration - 2500)
     start_offset = random.randint(0, max_offset)
 
     state.current_track = track
@@ -171,7 +173,11 @@ async def round_guess(
         )
     )
 
-    if correct or state.attempt >= 6:
+    # Determine if round is over
+    round_over = correct or state.attempt >= 6
+    attempt_number = state.attempt + 1
+
+    if round_over:
         revealed_track = state.current_track
         state.round_history.append(
             RoundResult(
@@ -202,10 +208,11 @@ async def round_guess(
 
     result: dict[str, Any] = {
         "correct": correct,
-        "attempt": state.attempt,
+        "attempt": attempt_number,
+        "round_over": round_over,
         "game_over": game_over,
     }
-    if state.attempt < 7 and not correct:
+    if not round_over and not correct:
         result["next_clip_duration_ms"] = CLIP_DURATIONS[state.attempt]
     if revealed:
         result["revealed_track"] = revealed
@@ -230,7 +237,11 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
         )
     )
 
-    if state.attempt >= 6:
+    # Determine if round is over
+    round_over = state.attempt >= 6
+    attempt_number = state.attempt + 1
+
+    if round_over:
         # Round ends after 7 attempts (0-indexed, so attempt 6 is the 7th)
         state.round_history.append(
             RoundResult(
@@ -262,10 +273,11 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
 
     result: dict[str, Any] = {
         "correct": False,
-        "attempt": state.attempt,
+        "attempt": attempt_number,
+        "round_over": round_over,
         "game_over": game_over,
     }
-    if state.attempt < 7 and not game_over:
+    if not round_over and not game_over:
         result["next_clip_duration_ms"] = CLIP_DURATIONS[state.attempt]
     if revealed:
         result["revealed_track"] = revealed

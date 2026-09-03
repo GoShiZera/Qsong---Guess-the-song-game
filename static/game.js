@@ -33,6 +33,7 @@
         scheduledStopTime: 0,
         progressAnimationId: null,
         selectedPlaylistId: null,
+        currentClipDuration: 100,  // Track current clip duration
     };
 
     // ---------- DOM Elements ----------
@@ -168,6 +169,9 @@
             return;
         }
         
+        // Store current clip duration for replay
+        state.currentClipDuration = durationMs;
+        
         initAudioContext();
         stopAudio();
 
@@ -221,8 +225,42 @@
         if (state.isPlaying) {
             stopAudio();
         } else if (state.audioBuffer && state.currentTrack) {
-            resumeAudio();
+            // If audio was ended (scheduledStopTime <= currentTime), replay from start
+            if (state.scheduledStopTime <= state.audioCtx.currentTime) {
+                replayClip();
+            } else {
+                resumeAudio();
+            }
         }
+    };
+
+    const replayClip = () => {
+        if (!state.audioBuffer || !state.currentTrack) return;
+        initAudioContext();
+        stopAudio();
+
+        const startTime = state.startOffset / 1000;
+        const duration = state.currentClipDuration / 1000;
+        const bufferDuration = state.audioBuffer.duration;
+
+        const actualStart = Math.min(startTime, bufferDuration - 0.05);
+        const actualDuration = Math.min(duration, bufferDuration - actualStart);
+
+        state.sourceNode = state.audioCtx.createBufferSource();
+        state.sourceNode.buffer = state.audioBuffer;
+        state.sourceNode.connect(state.gainNode);
+
+        state.sourceNode.start(0, actualStart, actualDuration);
+
+        state.isPlaying = true;
+        state.playStartTime = state.audioCtx.currentTime;
+        state.scheduledStopTime = state.playStartTime + actualDuration;
+
+        updateWaveform(true);
+        updatePlayPauseButton(true);
+        startProgressLoop(actualDuration * 1000);
+
+        state.sourceNode.onended = () => onAudioEnded();
     };
 
     const resumeAudio = () => {
@@ -422,6 +460,25 @@
 
     const showRoundResult = (data, trackName) => {
         const isCorrect = data.correct;
+        const isRoundOver = data.round_over || data.game_over || Boolean(data.revealed_track);
+        
+        let displayTrackName = '';
+        let displayArtist = '';
+        
+        if (isRoundOver && data.revealed_track) {
+            // Round is over - show the actual track name and artist
+            displayTrackName = data.revealed_track.name;
+            displayArtist = data.revealed_track.artist;
+        } else if (data.correct) {
+            // Correct guess - use the guessed track name
+            displayTrackName = trackName;
+            displayArtist = state.currentTrack?.artist || '';
+        } else {
+            // Wrong guess or skip - show what was guessed or "Pulou"
+            displayTrackName = trackName || 'Pulou';
+            displayArtist = '';
+        }
+        
         els.roundResult.hidden = false;
         els.roundResult.className = 'round-result';
         els.roundResult.innerHTML = `
@@ -437,8 +494,8 @@
                     <span class="result-title">${isCorrect ? 'Acertou!' : 'Errou!'}</span>
                 </div>
                 <div class="result-track">
-                    <span class="result-track-name">${trackName}</span>
-                    <span class="result-track-artist">${state.currentTrack?.artist || ''}</span>
+                    <span class="result-track-name">${displayTrackName}</span>
+                    <span class="result-track-artist">${displayArtist}</span>
                 </div>
             </div>
         `;
@@ -643,7 +700,8 @@
             state.attempt = data.attempt;
             markAttempt(state.attempt - 1, data.correct);
 
-            const trackName = state.currentTrack.name;
+            // Use revealed_track if available, otherwise use the guessed text
+            const trackName = data.revealed_track?.name || guessText;
             showRoundResult(data, trackName);
 
             if (data.correct) {
@@ -656,9 +714,11 @@
 
             updateScoreDisplay();
 
-            if (data.game_over || data.correct || state.attempt >= MAX_ATTEMPTS) {
+            // Check if round is over using explicit round_over flag or revealed_track
+            const isRoundOver = data.round_over || Boolean(data.revealed_track);
+            if (data.correct || isRoundOver) {
                 state.roundNumber++;
-                if (state.roundNumber > state.totalRounds || data.game_over) {
+                if (data.game_over || state.roundNumber > state.totalRounds) {
                     setTimeout(() => finishGame(), 2000);
                 } else {
                     setTimeout(() => startNextRound(), 2000);
@@ -688,14 +748,18 @@
             state.attempt = data.attempt;
             markAttempt(state.attempt - 1, false);
 
-            showRoundResult(data, state.currentTrack.name);
+            // Use revealed track name if available, otherwise "Pulou"
+            const trackName = data.revealed_track?.name || 'Pulou';
+            showRoundResult(data, trackName);
             state.wrongCount++;
             state.roundHistory.push({ ...data, track: state.currentTrack, correct: false });
             updateScoreDisplay();
 
-            if (data.game_over || state.attempt >= MAX_ATTEMPTS) {
+            // Check if round is over using explicit round_over flag or revealed_track
+            const isRoundOver = data.round_over || Boolean(data.revealed_track);
+            if (isRoundOver) {
                 state.roundNumber++;
-                if (state.roundNumber > state.totalRounds || data.game_over) {
+                if (data.game_over || state.roundNumber > state.totalRounds) {
                     setTimeout(() => finishGame(), 1500);
                 } else {
                     setTimeout(() => startNextRound(), 1500);
