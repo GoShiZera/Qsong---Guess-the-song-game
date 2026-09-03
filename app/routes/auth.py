@@ -3,6 +3,7 @@ import secrets
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 
+from app.config import settings
 from app.game_state import serialize_session
 from app.services.spotify import exchange_code_for_tokens, get_auth_url
 
@@ -17,7 +18,7 @@ async def login(request: Request, response: Response) -> RedirectResponse:
         value=state,
         max_age=600,
         httponly=True,
-        secure=True,
+        secure=settings.cookie_secure,
         samesite="lax",
     )
     auth_url = get_auth_url(state)
@@ -67,7 +68,7 @@ async def callback(
         value=cookie,
         max_age=60 * 60 * 24 * 7,
         httponly=True,
-        secure=True,
+        secure=settings.cookie_secure,
         samesite="lax",
     )
     response.delete_cookie("oauth_state")

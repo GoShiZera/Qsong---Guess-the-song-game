@@ -6,6 +6,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 
+from app.config import settings
 from app.game_state import deserialize_game_state, serialize_game_state
 from app.models import GameState, GuessRecord, RoundResult
 from app.services.deezer import match_spotify_to_deezer
@@ -97,7 +98,7 @@ async def game_start(
         value=cookie,
         max_age=60 * 60 * 24 * 7,
         httponly=True,
-        secure=True,
+        secure=settings.cookie_secure,
         samesite="lax",
     )
 
@@ -138,7 +139,7 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
         value=cookie,
         max_age=60 * 60 * 24 * 7,
         httponly=True,
-        secure=True,
+        secure=settings.cookie_secure,
         samesite="lax",
     )
 
@@ -200,7 +201,7 @@ async def round_guess(
         value=cookie,
         max_age=60 * 60 * 24 * 7,
         httponly=True,
-        secure=True,
+        secure=settings.cookie_secure,
         samesite="lax",
     )
 

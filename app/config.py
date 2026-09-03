@@ -11,6 +11,8 @@ class Settings:
         self.spotify_client_secret = os.getenv("SPOTIFY_CLIENT_SECRET", "")
         self.spotify_redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI", "")
         self.session_secret = os.getenv("SESSION_SECRET", "")
+        # Production default: secure cookies
+        self.cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
 
 
 settings = Settings()
