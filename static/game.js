@@ -34,6 +34,7 @@
         progressAnimationId: null,
         selectedPlaylistId: null,
         currentClipDuration: 100,  // Track current clip duration
+        currentRoundGuesses: [], // array de { attempt, guess, correct, skipped }
     };
 
     // ---------- DOM Elements ----------
@@ -84,6 +85,10 @@
         btnGuess: document.getElementById('btn-guess'),
         btnSkip: document.getElementById('btn-skip'),
         roundResult: document.getElementById('round-result'),
+
+        // Guess Log
+        guessLog: document.getElementById('guess-log'),
+        guessLogList: document.getElementById('guess-log-list'),
 
         // Summary
         finalCorrect: document.getElementById('final-correct'),
@@ -436,6 +441,54 @@
         });
     };
 
+    const addGuessToLog = (attemptNumber, guessText, isCorrect, isSkip) => {
+        // Adiciona ao estado local da rodada
+        state.currentRoundGuesses.push({
+            attempt: attemptNumber,
+            guess: guessText,
+            correct: isCorrect,
+            skipped: isSkip,
+        });
+        // Determina a classe e ícone do item
+        let itemClass, iconSvg;
+        if (isCorrect) {
+            itemClass = 'correct';
+            iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                           <polyline points="20 6 9 17 4 12"></polyline>
+                       </svg>`;
+        } else if (isSkip) {
+            itemClass = 'skipped';
+            iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                           <polyline points="5 12 12 5 19 12"></polyline>
+                       </svg>`;
+        } else {
+            itemClass = 'wrong';
+            iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                           <line x1="18" y1="6" x2="6" y2="18"></line>
+                           <line x1="6" y1="6" x2="18" y2="18"></line>
+                       </svg>`;
+        }
+        const displayText = isSkip
+            ? '— Pulou —'
+            : (guessText && guessText.trim() ? guessText : '— Pulou —');
+        const li = document.createElement('li');
+        li.className = `guess-log-item ${itemClass}`;
+        li.innerHTML = `
+            <span class="guess-log-num">${attemptNumber}</span>
+            <span class="guess-log-text">${displayText}</span>
+            <span class="guess-log-icon">${iconSvg}</span>
+        `;
+        els.guessLogList.appendChild(li);
+        // Exibe o container se ainda estava oculto
+        els.guessLog.hidden = false;
+    };
+
+    const clearGuessLog = () => {
+        state.currentRoundGuesses = [];
+        els.guessLogList.innerHTML = '';
+        els.guessLog.hidden = true;
+    };
+
     const populateDatalist = (tracks) => {
         els.tracksDatalist.innerHTML = '';
         tracks.forEach(t => {
@@ -655,6 +708,7 @@
 
         hideRoundResult();
         resetAttemptBoxes();
+        clearGuessLog();
         state.attempt = 0;
         setGameControlsEnabled(false);
         els.guessInput.value = '';
@@ -702,6 +756,11 @@
 
             // Use revealed_track if available, otherwise use the guessed text
             const trackName = data.revealed_track?.name || guessText;
+            
+            // Adicionar ao log de palpites ANTES de mostrar resultado
+            const attemptDisplayNumber = state.attempt;
+            addGuessToLog(attemptDisplayNumber, guessText, data.correct, false);
+
             showRoundResult(data, trackName);
 
             if (data.correct) {
@@ -750,6 +809,11 @@
 
             // Use revealed track name if available, otherwise "Pulou"
             const trackName = data.revealed_track?.name || 'Pulou';
+            
+            // Adicionar ao log de palpites ANTES de mostrar resultado
+            const attemptDisplayNumber = state.attempt;
+            addGuessToLog(attemptDisplayNumber, '', false, true);
+
             showRoundResult(data, trackName);
             state.wrongCount++;
             state.roundHistory.push({ ...data, track: state.currentTrack, correct: false });

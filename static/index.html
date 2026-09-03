@@ -104,6 +104,11 @@
         <!-- View 2: Jogo -->
         <section id="view-game" class="view" aria-label="Jogo em andamento" hidden>
             <header class="game-header">
+                <button type="button" id="btn-back-home" class="btn-back" aria-label="Voltar ao início">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
                 <div class="score">
                     <span id="score-correct" class="score-item correct">Acertos: <strong>0</strong></span>
                     <span id="score-total" class="score-item total">Rodada: <strong>1</strong>/<strong id="total-rounds">0</strong></span>
@@ -116,16 +121,31 @@
             </div>
             
             <div class="player-container" id="player-container">
+                <div class="clip-info">
+                    <span id="clip-attempt-label" class="clip-attempt">Tentativa 1/7</span>
+                    <span class="clip-divider">·</span>
+                    <span id="clip-duration-label" class="clip-duration">Trecho: 0.1s</span>
+                </div>
                 <div class="player" id="player">
-                    <div class="waveform" id="waveform" aria-hidden="true"></div>
+                    <div class="waveform" id="waveform" aria-hidden="true">
+                        <div class="waveform-bars">
+                            <!-- 20 barras geradas via CSS :nth-child -->
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                    </div>
                     <div class="player-controls">
-                        <button type="button" id="btn-play-pause" class="btn-icon" aria-label="Tocar" disabled>
-                            <svg class="icon-play" viewBox="0 0 24 24" width="24" height="24"><polygon points="5,3 19,12 5,21"></polygon></svg>
-                            <svg class="icon-pause" viewBox="0 0 24 24" width="24" height="24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                        <button type="button" id="btn-play-pause" class="btn-play" aria-label="Tocar" disabled>
+                            <svg class="icon-play" viewBox="0 0 24 24" width="26" height="26" fill="currentColor"><polygon points="5,3 19,12 5,21"></polygon></svg>
+                            <svg class="icon-pause" viewBox="0 0 24 24" width="26" height="26" fill="currentColor" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
                         </button>
                         <div class="progress-wrapper">
                             <span class="time-current" id="time-current">0:00</span>
-                            <div class="progress-bar-player" id="progress-bar-player" role="slider" aria-label="Progresso da música" aria-valuemin="0" aria-valuemax="100" tabindex="0"></div>
+                            <div class="progress-bar-player" id="progress-bar-player" role="slider" aria-label="Progresso" aria-valuemin="0" aria-valuemax="100" tabindex="0">
+                                <div class="progress-fill"></div>
+                            </div>
                             <span class="time-total" id="time-total">0:00</span>
                         </div>
                     </div>
@@ -154,14 +174,32 @@
                 </button>
             </form>
             
-            <button type="button" id="btn-skip" class="btn btn-skip" disabled>
+<button type="button" id="btn-skip" class="btn btn-skip" disabled>
                 Pular (Skip)
             </button>
             
+            <!-- Log acumulativo de palpites da rodada atual -->
+            <div id="guess-log" class="guess-log" hidden aria-live="polite" aria-label="Histórico de palpites da rodada">
+                <p class="guess-log-title">Seus palpites</p>
+                <ul id="guess-log-list" class="guess-log-list"></ul>
+            </div>
+
             <div id="round-result" class="round-result" hidden>
                 <div class="result-content"></div>
             </div>
-        </section>
+            
+            <!-- Modal de confirmação: Abandonar Partida -->
+            <div id="modal-confirm-back" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="modal-confirm-title">
+                <div class="modal-card">
+                    <h2 id="modal-confirm-title" class="modal-title">Abandonar partida?</h2>
+                    <p class="modal-body">Se voltar agora, a partida atual será perdida e não poderá ser retomada.</p>
+                    <div class="modal-actions">
+                        <button type="button" id="modal-btn-cancel" class="btn btn-ghost">Continuar jogando</button>
+                        <button type="button" id="modal-btn-confirm" class="btn btn-danger">Abandonar</button>
+                    </div>
+                </div>
+            </div>
+            </section>
         
         <!-- View 3: Resumo -->
         <section id="view-summary" class="view" aria-label="Resumo da partida" hidden>

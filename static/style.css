@@ -1039,6 +1039,99 @@ input::placeholder {
     }
 }
 
+/* ===== Guess Log — Histórico acumulativo de palpites da rodada ===== */
+.guess-log {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 16px 20px;
+    animation: slideUp var(--transition-normal) ease;
+}
+.guess-log-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+.guess-log-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.guess-log-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    font-size: 0.88rem;
+    animation: fadeIn var(--transition-fast) ease;
+}
+.guess-log-item.correct {
+    background: var(--accent-green-dim);
+    border: 1px solid rgba(29, 185, 84, 0.3);
+}
+.guess-log-item.wrong {
+    background: var(--accent-red-dim);
+    border: 1px solid rgba(229, 57, 53, 0.15);
+}
+.guess-log-item.skipped {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    opacity: 0.7;
+}
+.guess-log-num {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    min-width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+.guess-log-text {
+    flex: 1;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.guess-log-item.correct .guess-log-text {
+    color: var(--accent-green);
+}
+.guess-log-item.skipped .guess-log-text {
+    color: var(--text-muted);
+    font-style: italic;
+}
+.guess-log-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.guess-log-icon svg {
+    width: 14px;
+    height: 14px;
+}
+.guess-log-item.correct .guess-log-icon { color: var(--accent-green); }
+.guess-log-item.wrong   .guess-log-icon { color: var(--accent-red); }
+.guess-log-item.skipped .guess-log-icon { color: var(--text-muted); }
+/* Responsivo */
+@media (max-width: 480px) {
+    .guess-log {
+        padding: 12px 14px;
+    }
+    .guess-log-item {
+        padding: 7px 10px;
+        font-size: 0.84rem;
+    }
+}
+
 /* Print */
 @media print {
     .btn, .guess-form, .player-controls, .attempts-tracker {
