@@ -1,4 +1,5 @@
 import base64
+import logging
 import time
 from typing import Any, cast
 
@@ -9,6 +10,8 @@ from app.models import SpotifyTrack
 
 # App token cache (Client Credentials)
 _app_token_cache: dict[str, Any] = {"access_token": None, "expires_at": 0}
+
+logger = logging.getLogger(__name__)
 
 
 async def get_app_token() -> str:
@@ -240,7 +243,8 @@ async def _fetch_spotify_items(
                     use_refresh = token_data.get("refresh_token", use_refresh)
                     headers["Authorization"] = f"Bearer {token}"
                     resp = await client.get(url, headers=headers, timeout=10.0)
-                except Exception:
+                except Exception as e:
+                    logger.warning("Token refresh failed: %s", e)
                     pass
             if resp.status_code == 401:
                 raise ValueError("Token expirado ou inválido")
@@ -249,7 +253,9 @@ async def _fetch_spotify_items(
             resp.raise_for_status()
             data = resp.json()
 
-            for item in data.get("items", []):
+            items = data.get("items", [])
+            logger.debug("Fetched %d items from Spotify", len(items))
+            for item in items:
                 # Playlist: item has nested "track" key; Album: item IS the track
                 track = item.get("track") if "track" in item else item
                 if not track or track.get("type") != "track":
@@ -268,6 +274,7 @@ async def _fetch_spotify_items(
 
             url = data.get("next")
 
+    logger.info("_fetch_spotify_items: returning %d tracks", len(tracks))
     return tracks
 
 

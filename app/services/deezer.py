@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 
 import httpx
@@ -9,6 +10,8 @@ _DEEZER_SEARCH_URL = "https://api.deezer.com/search"
 _SEMAPHORE = asyncio.Semaphore(10)
 _MAX_RETRIES = 3
 _BASE_DELAY = 0.5
+
+logger = logging.getLogger(__name__)
 
 
 def _has_valid_preview(url: str | None) -> bool:
@@ -77,12 +80,20 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
     Match Spotify tracks to playable tracks.
     Priority: 1) Spotify preview_url, 2) Deezer search, 3) Skip if no preview found.
     """
+    logger.info("match_spotify_to_deezer: received %d Spotify tracks", len(spotify_tracks))
+    
     # First, separate tracks that already have Spotify preview
     def _has_spotify_preview(st: SpotifyTrack) -> bool:
         return _has_valid_preview(st.preview_url)
 
     tracks_with_spotify_preview = [st for st in spotify_tracks if _has_spotify_preview(st)]
     tracks_without_preview = [st for st in spotify_tracks if not _has_spotify_preview(st)]
+
+    logger.info(
+        "match_spotify_to_deezer: %d tracks with Spotify preview, %d without",
+        len(tracks_with_spotify_preview),
+        len(tracks_without_preview),
+    )
 
     playable: list[PlayableTrack] = []
 
@@ -108,12 +119,23 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for st, results in zip(tracks_without_preview, all_results, strict=False):
-            if isinstance(results, Exception) or not results:
+            if isinstance(results, Exception):
+                logger.warning(
+                    "Deezer search failed for %s - %s: %s",
+                    st.artist,
+                    st.name,
+                    results,
+                )
+                continue
+            if not results:
+                logger.debug("Deezer returned no results for %s - %s", st.artist, st.name)
                 continue
             best = _select_best_match(st.artist, results)  # type: ignore[arg-type]
             if best is None:
+                logger.debug("No artist match for %s - %s in Deezer results", st.artist, st.name)
                 continue
             if not _has_valid_preview(best.preview_url):
+                logger.debug("Deezer match has no preview for %s - %s", st.artist, st.name)
                 continue
             playable.append(
                 PlayableTrack(
@@ -125,4 +147,5 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                 )
             )
 
+    logger.info("match_spotify_to_deezer: returning %d playable tracks", len(playable))
     return playable

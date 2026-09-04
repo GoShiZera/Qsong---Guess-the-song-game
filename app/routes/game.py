@@ -1,9 +1,11 @@
+import logging
 import random
 import re
 import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Response
 
 from app.config import settings
@@ -23,6 +25,8 @@ from app.services.spotify import (
 )
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 PLAYLIST_ID_REGEX = re.compile(r"playlist/([a-zA-Z0-9]{22})")
 ALBUM_ID_REGEX = re.compile(r"album/([a-zA-Z0-9]{22})")
@@ -92,7 +96,36 @@ async def game_start(
         raise HTTPException(status_code=500, detail=f"Erro no Spotify: {e}") from None
     except HTTPException:
         raise
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        logger.error(
+            "Spotify API error: status=%s, response=%s, playlist_id=%s",
+            e.response.status_code,
+            e.response.text[:500] if e.response.text else "empty",
+            spotify_id,
+            exc_info=True,
+        )
+        if e.response.status_code == 403:
+            detail = (
+                "Sem permissão para acessar esta playlist. "
+                "Verifique se é pública ou se você tem acesso."
+            )
+            raise HTTPException(status_code=403, detail=detail) from None
+        if e.response.status_code == 429:
+            raise HTTPException(
+                status_code=429,
+                detail="Limite de requisições excedido. Tente novamente em alguns instantes.",
+            ) from None
+        raise HTTPException(
+            status_code=502,
+            detail=f"Erro na API do Spotify ({e.response.status_code})",
+        ) from None
+    except Exception as e:
+        logger.error(
+            "Unexpected error fetching playlist tracks: %s, playlist_id=%s",
+            e,
+            spotify_id,
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail="Erro interno do servidor") from None
 
     if not spotify_tracks:
