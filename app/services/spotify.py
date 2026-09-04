@@ -304,6 +304,11 @@ async def _fetch_spotify_items(
                 duration_ms = track.get("duration_ms", 0)
                 preview_url = track.get("preview_url")
 
+                # Extract album image URL
+                album = track.get("album", {})
+                images = album.get("images", [])
+                image_url = images[0].get("url") if images else None
+
                 if not track_id:
                     continue
 
@@ -314,6 +319,7 @@ async def _fetch_spotify_items(
                         spotify_id=track_id,
                         duration_ms=duration_ms,
                         preview_url=preview_url,
+                        image_url=image_url,
                     )
                 )
                 parsed_count += 1

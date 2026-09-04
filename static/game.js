@@ -108,6 +108,13 @@
         finalWrong: document.getElementById('final-wrong'),
         roundsDetail: document.getElementById('rounds-detail'),
         btnNewGame: document.getElementById('btn-new-game'),
+
+        // Round Result
+        resultCover: document.getElementById('result-cover'),
+        resultStatus: document.getElementById('result-status'),
+        resultTrackName: document.getElementById('result-track-name'),
+        resultArtist: document.getElementById('result-artist'),
+        btnNextRound: document.getElementById('btn-next-round'),
     };
 
     // ---------- Utility Functions ----------
@@ -395,6 +402,45 @@
         }
     };
 
+    // Play full preview (from 0 to end of preview)
+    const playFullPreview = async (previewUrl, durationMs) => {
+        if (!previewUrl) {
+            console.warn('No preview URL provided');
+            return;
+        }
+        
+        state.currentClipDuration = durationMs;
+        
+        initAudioContext();
+        stopAudio();
+
+        try {
+            state.audioBuffer = await fetchAndDecodeAudio(previewUrl);
+        } catch (e) {
+            console.error('Audio decode error:', e);
+            return;
+        }
+
+        const bufferDuration = state.audioBuffer.duration;
+        const actualDuration = Math.min(durationMs / 1000, bufferDuration);
+
+        state.sourceNode = state.audioCtx.createBufferSource();
+        state.sourceNode.buffer = state.audioBuffer;
+        state.sourceNode.connect(state.gainNode);
+
+        state.sourceNode.start(0, 0, actualDuration);
+
+        state.isPlaying = true;
+        state.playStartTime = state.audioCtx.currentTime;
+        state.scheduledStopTime = state.playStartTime + actualDuration;
+
+        updateWaveform(true);
+        updatePlayPauseButton(true);
+        startProgressLoop(actualDuration * 1000);
+
+        state.sourceNode.onended = () => onAudioEnded();
+    };
+
     // ---------- API Calls ----------
     const api = {
         async startGame(playlistId, rounds) {
@@ -590,44 +636,77 @@
     const showRoundResult = (data, trackName) => {
         const isCorrect = data.correct;
         const isRoundOver = data.round_over || data.game_over || Boolean(data.revealed_track);
+        const isGameOver = data.game_over || state.roundNumber >= state.totalRounds;
         
         let displayTrackName = '';
         let displayArtist = '';
+        let coverUrl = '';
         
         if (isRoundOver && data.revealed_track) {
             // Round is over - show the actual track name and artist
             displayTrackName = data.revealed_track.name;
             displayArtist = data.revealed_track.artist;
+            coverUrl = data.revealed_track.image_url || '';
         } else if (data.correct) {
             // Correct guess - use the guessed track name
             displayTrackName = trackName;
             displayArtist = state.currentTrack?.artist || '';
+            coverUrl = state.currentTrack?.image_url || '';
         } else {
             // Wrong guess or skip - show what was guessed or "Pulou"
             displayTrackName = trackName || 'Pulou';
             displayArtist = '';
+            coverUrl = state.currentTrack?.image_url || '';
         }
         
+        // Update the result card elements
+        if (els.resultCover) {
+            if (coverUrl) {
+                els.resultCover.src = coverUrl;
+                els.resultCover.hidden = false;
+            } else {
+                els.resultCover.hidden = true;
+            }
+        }
+        
+        if (els.resultStatus) {
+            els.resultStatus.textContent = isCorrect ? 'Acertou!' : 'Errou!';
+            els.resultStatus.className = `result-status ${isCorrect ? 'correct' : 'wrong'}`;
+        }
+        
+        if (els.resultTrackName) {
+            els.resultTrackName.textContent = displayTrackName;
+        }
+        
+        if (els.resultArtist) {
+            els.resultArtist.textContent = displayArtist;
+        }
+        
+        // Show/hide and set next button text
+        if (els.btnNextRound) {
+            if (isGameOver) {
+                els.btnNextRound.textContent = 'Ver Resumo';
+            } else {
+                els.btnNextRound.textContent = 'Próxima Rodada';
+            }
+            els.btnNextRound.hidden = false;
+        }
+        
+        // Show the result card
         els.roundResult.hidden = false;
-        els.roundResult.className = 'round-result';
-        els.roundResult.innerHTML = `
-            <div class="result-content ${isCorrect ? 'correct' : 'wrong'}">
-                <div class="result-header">
-                    <div class="result-icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            ${isCorrect 
-                                ? '<polyline points="20 6 9 17 4 12"></polyline>' 
-                                : '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>'}
-                        </svg>
-                    </div>
-                    <span class="result-title">${isCorrect ? 'Acertou!' : 'Errou!'}</span>
-                </div>
-                <div class="result-track">
-                    <span class="result-track-name">${displayTrackName}</span>
-                    <span class="result-track-artist">${displayArtist}</span>
-                </div>
-            </div>
-        `;
+        els.roundResult.className = `round-result ${isCorrect ? 'correct' : 'wrong'}`;
+        
+        // Disable guess controls
+        setGameControlsEnabled(false);
+        
+        // Play full preview
+        const previewUrl = data.revealed_track?.preview_url || state.currentTrack?.preview_url;
+        const previewDurationMs = data.revealed_track?.duration_ms || state.currentTrack?.duration_ms || 30000;
+        if (previewUrl) {
+            playFullPreview(previewUrl, previewDurationMs);
+            els.timeCurrent.textContent = formatTime(0);
+            els.timeTotal.textContent = formatTime(previewDurationMs);
+        }
     };
 
     const hideRoundResult = () => {
@@ -802,6 +881,9 @@
         }
 
         hideRoundResult();
+        if (els.btnNextRound) {
+            els.btnNextRound.hidden = true;
+        }
         resetAttemptBoxes();
         clearGuessLog();
         state.attempt = 0;
@@ -881,11 +963,7 @@
 
             if (isRoundOver) {
                 state.roundNumber++;
-                if (isGameOver) {
-                    setTimeout(() => finishGame(), 2000);
-                } else {
-                    setTimeout(() => startNextRound(), 2000);
-                }
+                showRoundResult(data, trackName);
             } else {
                 setTimeout(async () => {
                     setGameControlsEnabled(true);
@@ -896,13 +974,6 @@
                     els.timeCurrent.textContent = formatTime(0);
                     await playClip(state.currentTrack.preview_url, state.startOffset, data.next_clip_duration_ms);
                 }, 1500);
-            }
-
-            // Only show round result when round is over
-            if (data.correct || isRoundOver) {
-                showRoundResult(data, trackName);
-            } else {
-                hideRoundResult();
             }
 
         } catch (err) {
@@ -943,11 +1014,6 @@
             if (isRoundOver) {
                 state.roundNumber++;
                 showRoundResult(data, trackName);
-                if (isGameOver) {
-                    setTimeout(() => finishGame(), 1500);
-                } else {
-                    setTimeout(() => startNextRound(), 1500);
-                }
             } else {
                 setTimeout(async () => {
                     setGameControlsEnabled(true);
@@ -1093,6 +1159,15 @@
             handleGuess(els.guessInput.value);
         });
         els.btnSkip.addEventListener('click', handleSkip);
+        els.btnNextRound?.addEventListener('click', () => {
+            stopAudio();
+            hideRoundResult();
+            if (state.roundNumber > state.totalRounds) {
+                finishGame();
+            } else {
+                startNextRound();
+            }
+        });
 
         // Progress bar click to seek
         els.progressBarPlayer?.addEventListener('click', (e) => {

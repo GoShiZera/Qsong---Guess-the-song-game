@@ -565,6 +565,14 @@ input::placeholder {
     to { opacity: 1; transform: translateY(0); }
 }
 
+.result-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+}
+
 .result-content.correct {
     border-left: 4px solid var(--accent-green);
 }
@@ -573,58 +581,85 @@ input::placeholder {
     border-left: 4px solid var(--accent-red);
 }
 
-.result-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-
-.result-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-full);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+.result-cover {
+    width: 96px;
+    height: 96px;
+    border-radius: var(--radius-md);
+    object-fit: cover;
+    box-shadow: var(--shadow-md);
     flex-shrink: 0;
 }
 
-.result-content.correct .result-icon {
+.result-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.result-status {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    width: fit-content;
+    align-self: center;
+}
+
+.result-content.correct .result-status {
     background: var(--accent-green-dim);
     color: var(--accent-green);
 }
 
-.result-content.wrong .result-icon {
+.result-content.wrong .result-status {
     background: var(--accent-red-dim);
     color: var(--accent-red);
 }
 
-.result-title {
-    font-weight: 600;
-    font-size: 1rem;
-}
-
-.result-content.correct .result-title {
-    color: var(--accent-green);
-}
-
-.result-content.wrong .result-title {
-    color: var(--accent-red);
-}
-
-.result-track {
-    font-size: 0.95rem;
-    line-height: 1.5;
-}
-
 .result-track-name {
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 1.1rem;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.result-track-artist {
+.result-artist {
+    font-size: 0.9rem;
     color: var(--text-secondary);
+}
+
+.btn-next-round {
+    margin-top: 8px;
+    width: 100%;
+    max-width: 280px;
+    padding: 14px 24px;
+}
+
+@media (min-width: 480px) {
+    .result-content {
+        flex-direction: row;
+        text-align: left;
+    }
+    
+    .result-cover {
+        width: 80px;
+        height: 80px;
+    }
+    
+    .result-status {
+        align-self: flex-start;
+    }
+    
+    .btn-next-round {
+        width: auto;
+        max-width: none;
+        align-self: flex-end;
+        margin-top: auto;
+    }
 }
 
 /* Summary View */

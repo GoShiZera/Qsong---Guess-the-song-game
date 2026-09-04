@@ -9,6 +9,7 @@ class SpotifyTrack(BaseModel):
     spotify_id: str
     duration_ms: int
     preview_url: str | None = None
+    image_url: str | None = None
 
 
 class DeezerTrack(BaseModel):
@@ -18,6 +19,7 @@ class DeezerTrack(BaseModel):
     preview_url: str
     duration: int
     rank: int
+    image_url: str | None = None
 
 
 class PlayableTrack(BaseModel):
@@ -26,6 +28,7 @@ class PlayableTrack(BaseModel):
     preview_url: str
     duration_ms: int
     deezer_id: int
+    image_url: str | None = None
 
 
 class GameConfig(BaseModel):

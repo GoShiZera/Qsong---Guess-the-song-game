@@ -36,6 +36,13 @@ async def search_track(artist: str, title: str) -> list[DeezerTrack]:
 
                 results = []
                 for item in data.get("data", []):
+                    # Extract album image URL
+                    album = item.get("album", {})
+                    image_url = (
+                        album.get("cover_medium")
+                        or album.get("cover_big")
+                        or album.get("cover")
+                    )
                     results.append(
                         DeezerTrack(
                             id=item["id"],
@@ -44,6 +51,7 @@ async def search_track(artist: str, title: str) -> list[DeezerTrack]:
                             preview_url=item.get("preview", ""),
                             duration=item.get("duration", 0),
                             rank=item.get("rank", 0),
+                            image_url=image_url,
                         )
                     )
                 return results
@@ -109,6 +117,7 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                 preview_url=st.preview_url or "",
                 duration_ms=st.duration_ms,
                 deezer_id=spotify_id_counter,
+                image_url=st.image_url,
             )
         )
         spotify_id_counter -= 1
@@ -137,6 +146,8 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
             if not _has_valid_preview(best.preview_url):
                 logger.debug("Deezer match has no preview for %s - %s", st.artist, st.name)
                 continue
+            # Use Spotify track image if available, otherwise Deezer match image
+            image_url = st.image_url or best.image_url
             playable.append(
                 PlayableTrack(
                     name=st.name,
@@ -144,6 +155,7 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                     preview_url=best.preview_url,
                     duration_ms=best.duration * 1000,
                     deezer_id=best.id,
+                    image_url=image_url,
                 )
             )
 
