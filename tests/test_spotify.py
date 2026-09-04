@@ -44,6 +44,7 @@ async def test_fetch_playlist_tracks_success(monkeypatch: MonkeyPatch) -> None:
     mock_token_resp.json = lambda: {"access_token": "test_token", "expires_in": 3600}
 
     mock_tracks_resp = AsyncMock()
+    mock_tracks_resp.status_code = 200
     mock_tracks_resp.raise_for_status = lambda: None
     mock_tracks_resp.json = lambda: {
         "items": [

@@ -14,7 +14,13 @@ from app.game_state import (
 )
 from app.models import GameState, GuessRecord, RoundResult
 from app.services.deezer import match_spotify_to_deezer
-from app.services.spotify import fetch_album_tracks, fetch_playlist_tracks, fetch_user_playlists, fetch_user_profile
+from app.services.spotify import (
+    SpotifyAPIError,
+    fetch_album_tracks,
+    fetch_playlist_tracks,
+    fetch_user_playlists,
+    fetch_user_profile,
+)
 
 router = APIRouter()
 
@@ -71,6 +77,10 @@ async def game_start(
     access_token = user_tokens.get("access_token") if user_tokens else None
     refresh_token = user_tokens.get("refresh_token") if user_tokens else None
 
+    # Validate access token for private resources
+    if resource_type == "playlist" and spotify_id == "me:liked" and not access_token:
+        raise HTTPException(status_code=401, detail="Não autenticado para acessar Músicas Curtidas")
+
     try:
         if resource_type == "album":
             spotify_tracks = await fetch_album_tracks(spotify_id, access_token, refresh_token)
@@ -78,11 +88,15 @@ async def game_start(
             spotify_tracks = await fetch_playlist_tracks(spotify_id, access_token, refresh_token)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
+    except SpotifyAPIError as e:
+        raise HTTPException(status_code=500, detail=f"Erro no Spotify: {e}") from None
+    except HTTPException:
+        raise
     except Exception:
-        raise HTTPException(status_code=502, detail="Erro ao buscar no Spotify") from None
+        raise HTTPException(status_code=500, detail="Erro interno do servidor") from None
 
     if not spotify_tracks:
-        raise HTTPException(status_code=404, detail="Nenhuma faixa válida encontrada")
+        raise HTTPException(status_code=404, detail="Nenhuma faixa válida encontrada na playlist")
 
     pool = await match_spotify_to_deezer(spotify_tracks)
 
@@ -314,22 +328,6 @@ async def _get_game_state(request: Request) -> GameState | None:
     return get_game_session(session_id)
 
 
-@router.get("/game/summary")
-async def game_summary(request: Request) -> dict[str, Any]:
-    state = await _get_game_state(request)
-    if state is None:
-        raise HTTPException(status_code=400, detail="Sessão inválida ou expirada")
-
-    acertos = sum(1 for r in state.round_history if r.correct)
-    erros = len(state.round_history) - acertos
-
-    return {
-        "acertos": acertos,
-        "erros": erros,
-        "rounds": [r.model_dump() for r in state.round_history],
-    }
-
-
 @router.get("/user/profile")
 async def get_user_profile_route(request: Request) -> dict[str, Any]:
     session = getattr(request.state, "session", {})
@@ -343,8 +341,14 @@ async def get_user_profile_route(request: Request) -> dict[str, Any]:
     try:
         profile = await fetch_user_profile(access_token, refresh_token)
         return profile
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erro ao buscar perfil: {e}") from None
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from None
+    except SpotifyAPIError as e:
+        raise HTTPException(status_code=500, detail=f"Erro no Spotify: {e}") from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Erro interno do servidor") from None
 
 
 @router.get("/user/playlists")
@@ -359,6 +363,16 @@ async def get_user_playlists(request: Request) -> list[dict[str, Any]]:
 
     try:
         playlists = await fetch_user_playlists(access_token, refresh_token)
+        # Ensure all playlists have tracks_total field
+        for pl in playlists:
+            if "tracks_total" not in pl or pl["tracks_total"] is None:
+                pl["tracks_total"] = 0
         return playlists
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erro ao buscar playlists: {e}") from None
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from None
+    except SpotifyAPIError as e:
+        raise HTTPException(status_code=500, detail=f"Erro no Spotify: {e}") from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Erro interno do servidor") from None

@@ -91,7 +91,12 @@ def get_auth_url(state: str | None = None) -> str:
         "client_id": settings.spotify_client_id,
         "response_type": "code",
         "redirect_uri": settings.spotify_redirect_uri,
-        "scope": "playlist-read-private playlist-read-collaborative user-read-private user-library-read",
+        "scope": " ".join([
+            "playlist-read-private",
+            "playlist-read-collaborative",
+            "user-read-private",
+            "user-library-read",
+        ]),
         "show_dialog": "true",
     }
     if state:
@@ -137,6 +142,8 @@ async def fetch_user_profile(
     resp, new_access, new_refresh = await _call_spotify_with_user_token(
         access_token, refresh_token, "GET", url
     )
+    if resp.status_code == 401:
+        raise ValueError("Token expirado ou inválido")
     resp.raise_for_status()
     data = resp.json()
     images = data.get("images", [])
@@ -205,6 +212,13 @@ async def fetch_user_playlists(
     return items
 
 
+class SpotifyAPIError(Exception):
+    """Custom exception for Spotify API errors."""
+    def __init__(self: "SpotifyAPIError", message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
 async def _fetch_spotify_items(
     url: str,
     token: str,
@@ -228,6 +242,10 @@ async def _fetch_spotify_items(
                     resp = await client.get(url, headers=headers, timeout=10.0)
                 except Exception:
                     pass
+            if resp.status_code == 401:
+                raise ValueError("Token expirado ou inválido")
+            if resp.status_code >= 500:
+                raise SpotifyAPIError("Erro no servidor do Spotify", resp.status_code)
             resp.raise_for_status()
             data = resp.json()
 
@@ -251,25 +269,6 @@ async def _fetch_spotify_items(
             url = data.get("next")
 
     return tracks
-
-
-async def fetch_user_profile(
-    access_token: str, refresh_token: str | None = None
-) -> dict[str, Any]:
-    """Fetch authenticated user's profile info (name, avatar)."""
-    url = "https://api.spotify.com/v1/me"
-    resp, new_access, new_refresh = await _call_spotify_with_user_token(
-        access_token, refresh_token, "GET", url
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    images = data.get("images", [])
-    avatar_url = images[0].get("url") if images else None
-    return {
-        "id": data.get("id"),
-        "display_name": data.get("display_name") or "Usuário Spotify",
-        "avatar_url": avatar_url,
-    }
 
 
 async def fetch_playlist_tracks(

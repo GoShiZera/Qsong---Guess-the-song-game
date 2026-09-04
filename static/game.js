@@ -462,7 +462,18 @@
     const handleResponse = async (res) => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            throw new Error(data.detail || `HTTP ${res.status}`);
+            let errorMsg = data.detail || `HTTP ${res.status}`;
+            if (res.status === 502 || res.status === 500) {
+                errorMsg = 'Erro de conexão com Spotify. Verifique sua internet e tente novamente.';
+            } else if (res.status === 404) {
+                errorMsg = data.detail || 'Nenhuma faixa disponível. Tente outra playlist.';
+            } else if (res.status === 401) {
+                errorMsg = 'Sessão expirada. Faça login novamente.';
+            }
+            const err = new Error(errorMsg);
+            err.status = res.status;
+            err.data = data;
+            throw err;
         }
         return data;
     };
@@ -642,7 +653,7 @@
     const renderPlaylists = (playlists) => {
         els.playlistsList.innerHTML = '';
         if (!playlists.length) {
-            els.playlistsList.innerHTML = '<li class="playlists-empty">Nenhuma playlist com faixas encontrada</li>';
+            els.playlistsList.innerHTML = '<li class="playlists-empty">Nenhuma playlist encontrada</li>';
             return;
         }
         playlists.forEach(pl => {
@@ -651,11 +662,12 @@
             li.tabIndex = 0;
             li.dataset.playlistId = pl.id;
             const imgUrl = pl.images?.[0]?.url || '';
+            const trackCount = pl.tracks_total || 0;
             li.innerHTML = `
                 ${imgUrl ? `<img src="${imgUrl}" alt="" loading="lazy">` : '<div class="playlist-placeholder" style="width:56px;height:56px;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:20px;">🎵</div>'}
                 <div class="playlist-info">
                     <span class="playlist-name">${pl.name}</span>
-                    <span class="playlist-meta">${pl.tracks_total} faixas ${pl.public ? '• Pública' : '• Privada'}</span>
+                    <span class="playlist-meta">${trackCount} faixas ${pl.public ? '• Pública' : '• Privada'}</span>
                 </div>
                 <svg class="playlist-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
             `;
@@ -712,7 +724,16 @@
 
         } catch (err) {
             console.error('Start game error:', err);
-            showError(els.setupError, err.message || 'Erro ao iniciar jogo. Verifique a playlist e tente novamente.');
+            const msg = err.message || 'Erro desconhecido';
+            if (err.status === 502 || err.status === 500 || msg.includes('Erro de conexão com Spotify')) {
+                showError(els.setupError, 'Erro de conexão com Spotify. Verifique sua internet e tente novamente.');
+            } else if (msg.includes('Nenhuma faixa') || msg.includes('Nenhuma faixa válida')) {
+                showError(els.setupError, 'Nenhuma faixa disponível nesta playlist. Tente outra playlist.');
+            } else if (msg.includes('Não autenticado') || err.status === 401) {
+                showError(els.setupError, 'Sessão expirada. Faça login novamente.');
+            } else {
+                showError(els.setupError, msg);
+            }
             els.setupForm.hidden = false;
         } finally {
             els.setupProgress.hidden = true;
@@ -745,7 +766,16 @@
             await startNextRound();
         } catch (err) {
             console.error('Start game error:', err);
-            showError(els.playlistsError, err.message || 'Erro ao iniciar jogo');
+            const msg = err.message || 'Erro desconhecido';
+            if (err.status === 502 || err.status === 500 || msg.includes('Erro de conexão com Spotify')) {
+                showError(els.playlistsError, 'Erro de conexão com Spotify. Verifique sua internet e tente novamente.');
+            } else if (msg.includes('Nenhuma faixa') || msg.includes('Nenhuma faixa válida')) {
+                showError(els.playlistsError, 'Nenhuma faixa disponível nesta playlist. Tente outra playlist.');
+            } else if (msg.includes('Não autenticado') || err.status === 401) {
+                showError(els.playlistsError, 'Sessão expirada. Faça login novamente.');
+            } else {
+                showError(els.playlistsError, msg);
+            }
             els.playlistsList.hidden = false;
         } finally {
             els.playlistsLoading.hidden = true;
@@ -939,7 +969,12 @@
             renderPlaylists(playlists);
         } catch (err) {
             console.error('Load playlists error:', err);
-            showError(els.playlistsError, 'Erro ao carregar playlists. Tente fazer login novamente.');
+            const msg = err.message || 'Erro desconhecido';
+            if (err.status === 401 || msg.includes('Não autenticado') || msg.includes('Sessão expirada')) {
+                showError(els.playlistsError, 'Sessão expirada. Faça login novamente.');
+            } else {
+                showError(els.playlistsError, 'Erro ao carregar playlists. Tente fazer login novamente.');
+            }
         } finally {
             els.playlistsLoading.hidden = true;
             els.playlistsList.hidden = false;
