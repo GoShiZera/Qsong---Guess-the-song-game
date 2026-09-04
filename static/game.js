@@ -115,6 +115,9 @@
     const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
     const formatTime = (ms) => {
+        if (ms < 1000) {
+            return `${(ms / 1000).toFixed(1)}s`;
+        }
         const totalSec = Math.floor(ms / 1000);
         const min = Math.floor(totalSec / 60);
         const sec = totalSec % 60;
@@ -622,11 +625,11 @@
     };
 
     const renderSummary = (summary) => {
-        els.finalCorrect.textContent = summary.acertos;
-        els.finalWrong.textContent = summary.erros;
+        els.finalCorrect.textContent = summary.acertos ?? 0;
+        els.finalWrong.textContent = summary.erros ?? 0;
 
         els.roundsDetail.innerHTML = '';
-        summary.rounds.forEach((round, idx) => {
+        (summary.rounds || []).forEach((round, idx) => {
             const card = document.createElement('div');
             card.className = `round-card ${round.correct ? 'correct' : 'wrong'}`;
             card.innerHTML = `
@@ -635,11 +638,11 @@
                     <span class="round-outcome">${round.correct ? 'Acertou' : 'Errou'}</span>
                 </div>
                 <div class="round-track">
-                    <span class="round-track-name">${round.track.name}</span>
-                    <span class="round-track-artist">${round.track.artist}</span>
+                    <span class="round-track-name">${round.track?.name || 'Música'}</span>
+                    <span class="round-track-artist">${round.track?.artist || ''}</span>
                 </div>
                 <div class="round-guesses">
-                    ${round.guesses.map(g => `
+                    ${(round.guesses || []).map(g => `
                         <span class="guess-tag ${g.correct ? 'correct' : ''}">
                             ${g.attempt}. ${g.guess}
                         </span>
@@ -812,15 +815,23 @@
             state.currentTrack = data;
             state.startOffset = data.start_time_ms;
 
-            els.timeTotal.textContent = formatTime(state.currentTrack.duration_ms || 30000);
+            els.timeCurrent.textContent = formatTime(0);
+            els.timeTotal.textContent = formatTime(data.clip_duration_ms);
             setGameControlsEnabled(true);
             els.guessInput.focus();
 
             await playClip(data.preview_url, data.start_time_ms, data.clip_duration_ms);
             updateClipInfo(1, data.clip_duration_ms);
+            updateScoreDisplay();
 
         } catch (err) {
             console.error('Start round error:', err);
+            const msg = err.message || 'Erro desconhecido';
+            // If game is already finished or no tracks available, finish the game
+            if (err.status === 400 || msg.includes('Partida já finalizada') || msg.includes('Nenhuma faixa com preview disponível')) {
+                await finishGame();
+                return;
+            }
             setGameControlsEnabled(true); // Re-enable controls on error
             showRoundResult({ correct: false, revealed_track: { name: 'Erro ao carregar faixa', artist: '' } }, 'Erro');
         }
@@ -845,11 +856,22 @@
             addGuessToLog(attemptDisplayNumber, guessText, data.correct, false);
 
             // Check if round is over using explicit round_over flag or revealed_track
-            const isRoundOver = data.round_over || Boolean(data.revealed_track);
+            const isRoundOver = data.round_over || Boolean(data.revealed_track) || data.correct;
+            const isGameOver = data.game_over || state.roundNumber >= state.totalRounds;
             
-            if (data.correct || data.attempt >= MAX_ATTEMPTS || data.game_over) {
+            // Increment correct/wrong counters
+            if (data.correct) {
+                state.correctCount++;
+            } else if (isRoundOver) {
+                state.wrongCount++;
+            }
+            
+            // Update score display
+            updateScoreDisplay();
+
+            if (isRoundOver) {
                 state.roundNumber++;
-                if (data.game_over || state.roundNumber > state.totalRounds) {
+                if (isGameOver) {
                     setTimeout(() => finishGame(), 2000);
                 } else {
                     setTimeout(() => startNextRound(), 2000);
@@ -860,11 +882,11 @@
                     els.guessInput.value = '';
                     els.guessInput.focus();
                     updateClipInfo(state.attempt + 1, data.next_clip_duration_ms);
+                    els.timeTotal.textContent = formatTime(data.next_clip_duration_ms);
+                    els.timeCurrent.textContent = formatTime(0);
                     await playClip(state.currentTrack.preview_url, state.startOffset, data.next_clip_duration_ms);
                 }, 1500);
             }
-
-            updateScoreDisplay();
 
             // Only show round result when round is over
             if (data.correct || isRoundOver) {
@@ -898,10 +920,20 @@
 
             // Check if round is over using explicit round_over flag or revealed_track
             const isRoundOver = data.round_over || Boolean(data.revealed_track);
+            const isGameOver = data.game_over || state.roundNumber >= state.totalRounds;
+            
+            // Increment wrong counter if round is over
             if (isRoundOver) {
-                showRoundResult(data, trackName);
+                state.wrongCount++;
+            }
+            
+            // Update score display
+            updateScoreDisplay();
+
+            if (isRoundOver) {
                 state.roundNumber++;
-                if (data.game_over || state.roundNumber > state.totalRounds) {
+                showRoundResult(data, trackName);
+                if (isGameOver) {
                     setTimeout(() => finishGame(), 1500);
                 } else {
                     setTimeout(() => startNextRound(), 1500);
@@ -912,9 +944,12 @@
                     els.guessInput.value = '';
                     els.guessInput.focus();
                     updateClipInfo(state.attempt + 1, data.next_clip_duration_ms);
+                    els.timeTotal.textContent = formatTime(data.next_clip_duration_ms);
+                    els.timeCurrent.textContent = formatTime(0);
                     await playClip(state.currentTrack.preview_url, state.startOffset, data.next_clip_duration_ms);
                 }, 1000);
             }
+
         } catch (err) {
             console.error('Skip error:', err);
             setGameControlsEnabled(true);

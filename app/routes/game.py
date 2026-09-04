@@ -244,7 +244,10 @@ async def round_guess(
         state.current_track = None
         state.attempt = 0
         state.guess_history = []
-        game_over = state.round_atual >= state.rounds_total
+        # Check if game is over: either all rounds played or no more tracks available
+        played_ids = {r.track.deezer_id for r in state.round_history}
+        remaining = [t for t in state.pool if t.deezer_id not in played_ids and t.preview_url]
+        game_over = state.round_atual >= state.rounds_total or len(remaining) == 0
         revealed: dict[str, Any] | None = (
             revealed_track.model_dump() if revealed_track else None
         )
@@ -309,7 +312,10 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
         state.current_track = None
         state.attempt = 0
         state.guess_history = []
-        game_over = state.round_atual >= state.rounds_total
+        # Check if game is over: either all rounds played or no more tracks available
+        played_ids = {r.track.deezer_id for r in state.round_history}
+        remaining = [t for t in state.pool if t.deezer_id not in played_ids and t.preview_url]
+        game_over = state.round_atual >= state.rounds_total or len(remaining) == 0
         revealed: dict[str, Any] | None = (
             revealed_track.model_dump() if revealed_track else None
         )
