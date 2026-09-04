@@ -281,11 +281,18 @@
         } else if (state.audioBuffer && state.currentTrack) {
             // If audio was ended (scheduledStopTime <= currentTime), replay from start
             if (state.scheduledStopTime <= state.audioCtx.currentTime) {
-                // Replay full preview from start (limited to 30s)
-                const previewUrl = state.currentTrack?.preview_url;
-                const previewDurationMs = Math.min(state.currentTrack?.duration_ms || 30000, 30000);
-                if (previewUrl) {
-                    playFullPreview(previewUrl, previewDurationMs);
+                // Check if we're in a round (clip duration < 30s) or reveal mode (full preview 30s)
+                const isRevealMode = state.currentClipDuration >= 30000;
+                if (isRevealMode) {
+                    // Replay full preview from start (limited to 30s)
+                    const previewUrl = state.currentTrack?.preview_url;
+                    const previewDurationMs = Math.min(state.currentTrack?.duration_ms || 30000, 30000);
+                    if (previewUrl) {
+                        playFullPreview(previewUrl, previewDurationMs);
+                    }
+                } else {
+                    // During round: replay the clip from start offset with clip duration
+                    replayClip();
                 }
             } else {
                 resumeAudio();
