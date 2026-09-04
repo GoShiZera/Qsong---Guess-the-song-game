@@ -182,7 +182,8 @@ async def fetch_user_playlists(
         for pl in data.get("items", []):
             if not pl:
                 continue
-            tracks_info = pl.get("tracks")
+            # Spotify API may return track count under "tracks" or "items" key
+            tracks_info = pl.get("tracks") or pl.get("items")
             total = tracks_info.get("total", 0) if isinstance(tracks_info, dict) else 0
             items.append({
                 "id": pl["id"],
@@ -263,28 +264,77 @@ async def _fetch_spotify_items(
             data = resp.json()
 
             items = data.get("items", [])
-            logger.debug("Fetched %d items from Spotify", len(items))
+            logger.info(
+                "Spotify API: fetched %d raw items from %s",
+                len(items),
+                url.split("?")[0],
+            )
+            parsed_count = 0
             for item in items:
-                # Playlist: item has nested "track" key; Album: item IS the track
-                track = item.get("track") if "track" in item else item
-                if not track or track.get("type") != "track":
+                # Playlist /items endpoint: track data is under "item" key
+                # Playlist /tracks (legacy) endpoint: track data is under "track" key
+                # Album endpoint: item IS the track
+                track = None
+                if "item" in item:
+                    track = item.get("item")
+                elif "track" in item:
+                    track = item.get("track")
+                else:
+                    track = item
+
+                if not track:
                     continue
+
+                track_type = track.get("type")
+                if track_type and track_type != "track":
+                    logger.debug(
+                        "Skipping non-track item: type=%s, id=%s",
+                        track_type,
+                        track.get("id", "unknown"),
+                    )
+                    continue
+
+                name = track.get("name")
+                if not name:
+                    continue
+
                 artists = track.get("artists", [])
                 artist_name = artists[0]["name"] if artists else "Desconhecido"
+                track_id = track.get("id")
+                duration_ms = track.get("duration_ms", 0)
+                preview_url = track.get("preview_url")
+
+                if not track_id:
+                    continue
+
                 tracks.append(
                     SpotifyTrack(
-                        name=track["name"],
+                        name=name,
                         artist=artist_name,
-                        spotify_id=track["id"],
-                        duration_ms=track["duration_ms"],
-                        preview_url=track.get("preview_url"),
+                        spotify_id=track_id,
+                        duration_ms=duration_ms,
+                        preview_url=preview_url,
                     )
+                )
+                parsed_count += 1
+
+            logger.info(
+                "Spotify API: parsed %d valid tracks from %d raw items (url: %s)",
+                parsed_count,
+                len(items),
+                url.split("?")[0],
+            )
+            if len(items) > 0 and parsed_count == 0:
+                logger.warning(
+                    "Spotify API: 0 tracks parsed from %d items. First item keys: %s",
+                    len(items),
+                    list(items[0].keys()) if items else [],
                 )
 
             url = data.get("next")
 
-    logger.info("_fetch_spotify_items: returning %d tracks", len(tracks))
-    return tracks
+        logger.info("_fetch_spotify_items: returning %d tracks", len(tracks))
+        return tracks
 
 
 async def fetch_playlist_tracks(
