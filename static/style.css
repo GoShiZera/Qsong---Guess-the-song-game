@@ -1055,11 +1055,34 @@ input::placeholder {
     color: var(--accent-green);
 }
 
+.playlist-item.selected {
+    border-color: var(--accent-green);
+    background: var(--bg-tertiary);
+}
+
 /* Empty state */
 .playlists-empty {
     text-align: center;
     padding: 32px;
     color: var(--text-muted);
+}
+
+/* Select Playlist Config */
+.select-playlist-config {
+    margin-top: 24px;
+    padding: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    animation: slideUp var(--transition-normal) ease;
+}
+
+.select-playlist-config .form-group {
+    margin-bottom: 16px;
+}
+
+.select-playlist-config .btn-primary {
+    width: 100%;
 }
 
 /* Responsive adjustments for setup options */

@@ -70,6 +70,10 @@
         selectUrlForm: document.getElementById('select-url-form'),
         selectPlaylistInput: document.getElementById('select-playlist-input'),
         btnStartSelectUrl: document.getElementById('btn-start-select-url'),
+        // Select playlist config
+        selectPlaylistConfig: document.getElementById('select-playlist-config'),
+        selectRoundsInput: document.getElementById('select-rounds-input'),
+        btnStartPlaylistGame: document.getElementById('btn-start-playlist-game'),
 
         // Game
         scoreCorrect: document.getElementById('score-correct'),
@@ -277,7 +281,12 @@
         } else if (state.audioBuffer && state.currentTrack) {
             // If audio was ended (scheduledStopTime <= currentTime), replay from start
             if (state.scheduledStopTime <= state.audioCtx.currentTime) {
-                replayClip();
+                // Replay full preview from start (limited to 30s)
+                const previewUrl = state.currentTrack?.preview_url;
+                const previewDurationMs = Math.min(state.currentTrack?.duration_ms || 30000, 30000);
+                if (previewUrl) {
+                    playFullPreview(previewUrl, previewDurationMs);
+                }
             } else {
                 resumeAudio();
             }
@@ -402,14 +411,16 @@
         }
     };
 
-    // Play full preview (from 0 to end of preview)
+    // Play full preview (from 0 to end of preview, max 30s)
     const playFullPreview = async (previewUrl, durationMs) => {
         if (!previewUrl) {
             console.warn('No preview URL provided');
             return;
         }
         
-        state.currentClipDuration = durationMs;
+        // Limit preview duration to 30 seconds (30000ms)
+        const limitedDurationMs = Math.min(durationMs, 30000);
+        state.currentClipDuration = limitedDurationMs;
         
         initAudioContext();
         stopAudio();
@@ -422,7 +433,7 @@
         }
 
         const bufferDuration = state.audioBuffer.duration;
-        const actualDuration = Math.min(durationMs / 1000, bufferDuration);
+        const actualDuration = Math.min(limitedDurationMs / 1000, bufferDuration);
 
         state.sourceNode = state.audioCtx.createBufferSource();
         state.sourceNode.buffer = state.audioBuffer;
@@ -630,7 +641,8 @@
         els.guessInput.disabled = !enabled;
         els.btnGuess.disabled = !enabled;
         els.btnSkip.disabled = !enabled;
-        els.btnPlayPause.disabled = !enabled;
+        // btnPlayPause permanece habilitado para permitir reproduzir/pausar o preview revelado
+        els.btnPlayPause.disabled = false;
     };
 
     const showRoundResult = (data, trackName) => {
@@ -699,9 +711,9 @@
         // Disable guess controls
         setGameControlsEnabled(false);
         
-        // Play full preview
+        // Play full preview (limited to 30s)
         const previewUrl = data.revealed_track?.preview_url || state.currentTrack?.preview_url;
-        const previewDurationMs = data.revealed_track?.duration_ms || state.currentTrack?.duration_ms || 30000;
+        const previewDurationMs = Math.min(data.revealed_track?.duration_ms || state.currentTrack?.duration_ms || 30000, 30000);
         if (previewUrl) {
             playFullPreview(previewUrl, previewDurationMs);
             els.timeCurrent.textContent = formatTime(0);
@@ -763,7 +775,19 @@
                 </div>
                 <svg class="playlist-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
             `;
-            const selectPlaylist = () => startGameFromPlaylist(pl.id);
+            const selectPlaylist = () => {
+                // Visual selection
+                $$('.playlist-item', els.playlistsList).forEach(item => item.classList.remove('selected'));
+                li.classList.add('selected');
+                state.selectedPlaylistId = pl.id;
+                // Show config and enable start button
+                if (els.selectPlaylistConfig) {
+                    els.selectPlaylistConfig.hidden = false;
+                }
+                if (els.btnStartPlaylistGame) {
+                    els.btnStartPlaylistGame.disabled = false;
+                }
+            };
             li.addEventListener('click', selectPlaylist);
             li.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -833,8 +857,7 @@
         }
     };
 
-    const startGameFromPlaylist = async (playlistId) => {
-        const rounds = els.roundsInputSelect?.value ? parseInt(els.roundsInputSelect.value, 10) : null;
+    const startGameFromPlaylist = async (playlistId, rounds = null) => {
         state.selectedPlaylistId = playlistId;
         hideError(els.playlistsError);
         els.playlistsList.hidden = true;
@@ -1057,6 +1080,15 @@
         els.playlistsLoading.hidden = false;
         els.playlistsError.hidden = true;
         els.playlistsList.hidden = true;
+        // Hide config section when reloading playlists
+        if (els.selectPlaylistConfig) {
+            els.selectPlaylistConfig.hidden = true;
+        }
+        // Reset selection
+        state.selectedPlaylistId = null;
+        if (els.btnStartPlaylistGame) {
+            els.btnStartPlaylistGame.disabled = true;
+        }
         // Carregar dados de perfil do usuário
         try {
             const profile = await api.getUserProfile();
@@ -1146,6 +1178,15 @@
 
         els.selectPlaylistInput?.addEventListener('input', () => {
             els.btnStartSelectUrl.disabled = !els.selectPlaylistInput.value.trim();
+        });
+
+        // Manual start button for selected playlist
+        els.btnStartPlaylistGame?.addEventListener('click', () => {
+            const playlistId = state.selectedPlaylistId;
+            const rounds = els.selectRoundsInput?.value ? parseInt(els.selectRoundsInput.value, 10) : null;
+            if (playlistId) {
+                startGameFromPlaylist(playlistId, rounds);
+            }
         });
 
         // Game controls
