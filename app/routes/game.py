@@ -215,6 +215,10 @@ async def round_guess(
         raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
 
     correct = _normalize(guess) == _normalize(state.current_track.name)
+    normalized_guess = _normalize(guess)
+    expected_name = _normalize(state.current_track.name)
+    expected_full = _normalize(f"{state.current_track.name} - {state.current_track.artist}")
+    correct = normalized_guess == expected_name or normalized_guess == expected_full
     clip_duration = CLIP_DURATIONS[state.attempt]
 
     state.guess_history.append(

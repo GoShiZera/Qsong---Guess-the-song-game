@@ -557,9 +557,19 @@
 
     const populateDatalist = (tracks) => {
         els.tracksDatalist.innerHTML = '';
-        tracks.forEach(t => {
+        // Sort tracks alphabetically by name (A-Z)
+        const sortedTracks = [...tracks].sort((a, b) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        );
+        const seen = new Set();
+        sortedTracks.forEach(t => {
+            const artist = t.artist || '';
+            const displayValue = artist ? `${t.name} - ${artist}` : t.name;
+            // Avoid duplicate entries in the datalist
+            if (seen.has(displayValue)) return;
+            seen.add(displayValue);
             const option = document.createElement('option');
-            option.value = t.name;
+            option.value = displayValue;
             els.tracksDatalist.appendChild(option);
         });
     };
