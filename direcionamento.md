@@ -326,7 +326,7 @@ Todos devem passar.
 ## 14. Referências Rápidas
 
 - **Spotify Client Credentials:** `POST https://accounts.spotify.com/api/token` (Basic auth client_id:secret, grant_type=client_credentials)
-- **Spotify Playlist Tracks:** `GET https://api.spotify.com/v1/playlists/{id}/tracks?limit=100&offset=...` (paginação via `next`)
+- **Spotify Playlist Items (replaces deprecated /tracks):** `GET https://api.spotify.com/v1/playlists/{id}/items?limit=100&offset=...` (paginação via `next`)
 - **Deezer Search:** `GET https://api.deezer.com/search?q=artist:"X"+track:"Y"` (sem auth)
 - **Web Audio API:** `AudioContext` → `fetch(url).arrayBuffer()` → `decodeAudioData()` → `AudioBufferSourceNode.start(0, offset, duration)`
 

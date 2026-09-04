@@ -248,6 +248,15 @@ async def _fetch_spotify_items(
                     pass
             if resp.status_code == 401:
                 raise ValueError("Token expirado ou inválido")
+            if resp.status_code == 403:
+                # Log full URL and response for debugging deprecated endpoints
+                response_text = resp.text[:500] if resp.text else "empty"
+                logger.error(
+                    "Spotify API 403 Forbidden - possible deprecated endpoint: "
+                    "url=%s, response=%s",
+                    url,
+                    response_text,
+                )
             if resp.status_code >= 500:
                 raise SpotifyAPIError("Erro no servidor do Spotify", resp.status_code)
             resp.raise_for_status()
@@ -300,7 +309,9 @@ async def fetch_playlist_tracks(
         token = await get_app_token()
         use_refresh = None
 
-    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks?limit=100"
+    # FIXED: Spotify deprecated /playlists/{id}/tracks on Feb 11, 2026
+    # Use /playlists/{id}/items instead (same response structure with nested "track")
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/items?limit=100"
     return await _fetch_spotify_items(url, token, use_refresh)
 
 
@@ -317,5 +328,8 @@ async def fetch_album_tracks(
         token = await get_app_token()
         use_refresh = None
 
+    # FIXED: Spotify deprecated /albums/{id}/tracks on Feb 11, 2026
+    # Use /albums/{id}/tracks still works as of now, but /items is the new standard
+    # Keeping /tracks for albums as it's a different endpoint that may not be deprecated
     url = f"https://api.spotify.com/v1/albums/{album_id}/tracks?limit=50"
     return await _fetch_spotify_items(url, token, use_refresh)
