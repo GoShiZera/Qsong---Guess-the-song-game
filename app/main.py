@@ -1,3 +1,5 @@
+import logging
+import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -10,6 +12,19 @@ from starlette.responses import Response
 from app.config import settings
 from app.game_state import deserialize_session
 from app.routes import auth, game
+
+# Configure logging for Render/Cloud deployment
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True,
+)
+
+# Set specific loggers to DEBUG for detailed tracking
+logging.getLogger("app.services.deezer").setLevel(logging.DEBUG)
+logging.getLogger("app.services.spotify").setLevel(logging.DEBUG)
+logging.getLogger("app.routes.game").setLevel(logging.DEBUG)
 
 app = FastAPI()
 if settings.cookie_secure:
