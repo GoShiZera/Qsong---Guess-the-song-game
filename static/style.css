@@ -552,16 +552,17 @@ input::placeholder {
     color: var(--text-muted);
 }
 
-/* Round Result */
+/* Round Result - Inside Player */
 .round-result {
     background: var(--bg-secondary);
-    border-radius: var(--radius-lg);
-    padding: 20px;
+    border-radius: var(--radius-md);
+    padding: 16px;
     animation: slideUp var(--transition-normal) ease;
+    width: 100%;
 }
 
 @keyframes slideUp {
-    from { opacity: 0; transform: translateY(16px); }
+    from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
@@ -570,7 +571,7 @@ input::placeholder {
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 16px;
+    gap: 12px;
 }
 
 .result-content.correct {
@@ -582,8 +583,8 @@ input::placeholder {
 }
 
 .result-cover {
-    width: 96px;
-    height: 96px;
+    width: 80px;
+    height: 80px;
     border-radius: var(--radius-md);
     object-fit: cover;
     box-shadow: var(--shadow-md);
@@ -620,7 +621,7 @@ input::placeholder {
 
 .result-track-name {
     font-weight: 700;
-    font-size: 1.1rem;
+    font-size: 1rem;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -628,7 +629,7 @@ input::placeholder {
 }
 
 .result-artist {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
 }
 
@@ -636,7 +637,7 @@ input::placeholder {
     margin-top: 8px;
     width: 100%;
     max-width: 280px;
-    padding: 14px 24px;
+    padding: 12px 20px;
 }
 
 @media (min-width: 480px) {
@@ -646,8 +647,8 @@ input::placeholder {
     }
     
     .result-cover {
-        width: 80px;
-        height: 80px;
+        width: 72px;
+        height: 72px;
     }
     
     .result-status {
@@ -660,6 +661,12 @@ input::placeholder {
         align-self: flex-end;
         margin-top: auto;
     }
+}
+
+/* Clip Info & Waveform hidden states */
+.clip-info.hidden,
+.waveform.hidden {
+    display: none;
 }
 
 /* Summary View */
@@ -910,26 +917,26 @@ input::placeholder {
 }
 
 .divider {
-    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
     color: var(--text-muted);
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 8px 0;
+    white-space: nowrap;
 }
 
 .divider::before,
 .divider::after {
     content: '';
-    position: absolute;
-    top: 50%;
-    width: 40%;
+    flex: 1;
     height: 1px;
     background: var(--border-color);
+    min-width: 0;
 }
-
-.divider::before { left: 0; }
-.divider::after { right: 0; }
 
 .option-hint {
     color: var(--text-secondary);
@@ -1085,15 +1092,9 @@ input::placeholder {
     width: 100%;
 }
 
-/* Responsive adjustments for setup options */
 @media (max-width: 480px) {
     .btn-spotify {
         max-width: none;
-    }
-    
-    .divider::before,
-    .divider::after {
-        width: 30%;
     }
 }
 
@@ -1218,7 +1219,7 @@ input::placeholder {
     outline-offset: 2px;
 }
 
-/* ===== Botão de Play (.btn-play) ===== */
+/* ===== Botão de Play (.btn-play) - Spotify Style ===== */
 .btn-play {
     display: inline-flex;
     align-items: center;
@@ -1233,21 +1234,48 @@ input::placeholder {
     cursor: pointer;
     transition: all var(--transition-fast);
     flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(29, 185, 84, 0.4);
 }
 
 .btn-play:not(:disabled):hover {
     background: var(--accent-green-hover);
     transform: scale(1.06);
+    box-shadow: 0 6px 20px rgba(30, 215, 96, 0.5);
 }
 
 .btn-play:not(:disabled):active {
     transform: scale(0.96);
 }
 
+.btn-play:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 4px var(--accent-green-dim), 0 4px 14px rgba(29, 185, 84, 0.4);
+}
+
 .btn-play:disabled {
     opacity: 0.35;
     cursor: not-allowed;
     transform: none;
+    box-shadow: none;
+}
+
+.btn-play .icon-play {
+    display: block;
+    transform: translateX(1px);
+    transition: opacity var(--transition-fast);
+}
+
+.btn-play .icon-pause {
+    display: none;
+    transition: opacity var(--transition-fast);
+}
+
+.btn-play.playing .icon-play {
+    display: none;
+}
+
+.btn-play.playing .icon-pause {
+    display: block;
 }
 
 /* ===== Botões do Modal de Confirmação ===== */
@@ -1266,6 +1294,67 @@ input::placeholder {
 .btn-danger:hover {
     background: #d32f2f;
     transform: scale(1.02);
+}
+
+/* ===== Modal Overlay ===== */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fadeIn var(--transition-normal) ease;
+}
+
+.modal-overlay[hidden] {
+    display: none !important;
+}
+
+.modal-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 420px;
+    width: 100%;
+    padding: 24px;
+    animation: scaleUp var(--transition-normal) ease;
+}
+
+@keyframes scaleUp {
+    from { opacity: 0; transform: scale(0.92); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.modal-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.modal-body {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.modal-actions .btn {
+    flex: 1;
+    max-width: 160px;
 }
 
 /* Print */

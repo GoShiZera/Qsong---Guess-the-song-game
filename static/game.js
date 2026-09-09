@@ -405,6 +405,7 @@
             playIcon.hidden = playing;
             pauseIcon.hidden = !playing;
         }
+        els.btnPlayPause.classList.toggle('playing', playing);
         els.btnPlayPause.setAttribute('aria-label', playing ? 'Pausar' : 'Tocar');
     };
 
@@ -689,7 +690,7 @@
         }
         
         if (els.resultStatus) {
-            els.resultStatus.textContent = isCorrect ? 'Acertou!' : 'Errou!';
+            els.resultStatus.textContent = isCorrect ? 'Acertou!' : 'Fim das tentativas';
             els.resultStatus.className = `result-status ${isCorrect ? 'correct' : 'wrong'}`;
         }
         
@@ -711,6 +712,14 @@
             els.btnNextRound.hidden = false;
         }
         
+        // Hide clip-info and waveform, show round-result
+        if (els.clipAttemptLabel?.parentElement) {
+            els.clipAttemptLabel.parentElement.hidden = true;
+        }
+        if (els.waveform) {
+            els.waveform.hidden = true;
+        }
+        
         // Show the result card
         els.roundResult.hidden = false;
         els.roundResult.className = `round-result ${isCorrect ? 'correct' : 'wrong'}`;
@@ -730,6 +739,14 @@
 
     const hideRoundResult = () => {
         els.roundResult.hidden = true;
+        
+        // Show clip-info and waveform
+        if (els.clipAttemptLabel?.parentElement) {
+            els.clipAttemptLabel.parentElement.hidden = false;
+        }
+        if (els.waveform) {
+            els.waveform.hidden = false;
+        }
     };
 
     const renderSummary = (summary) => {
@@ -928,6 +945,14 @@
         }
         updateWaveform(false);
         updatePlayPauseButton(false);
+
+        // Ensure clip-info and waveform are visible
+        if (els.clipAttemptLabel?.parentElement) {
+            els.clipAttemptLabel.parentElement.hidden = false;
+        }
+        if (els.waveform) {
+            els.waveform.hidden = false;
+        }
 
         try {
             const data = await api.startRound();
