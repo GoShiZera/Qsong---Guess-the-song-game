@@ -20,6 +20,9 @@
                     <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24C7.167 15.142 3.83 12.777 3.83 8.998c0-2.384 1.578-4.455 3.853-5.193.241-.06.48-.061.721 0 2.256.707 3.83 2.76 3.83 5.162 0 1.553-.72 2.915-1.839 3.804-.24.179-.18.599.12 1.022zm1.56-2.622c1.948-1.38 3.096-3.707 3.096-6.135 0-3.655-2.539-5.756-5.912-5.756-3.372 0-5.912 2.101-5.912 5.756 0 2.734 1.334 5.205 3.43 6.578.24.18.18.599-.061.72-2.43.871-4.216 2.812-4.216 5.29 0 3.034 2.539 5.107 5.912 5.107 3.633 0 6.048-2.227 6.048-5.815 0-.539-.061-1.08-.18-1.56z"/></svg>
                     <span>Entrar com Spotify</span>
                 </button>
+                <button type="button" class="btn btn-ghost btn-daily" data-action="daily">
+                    🎯 Desafio Diário
+                </button>
                 <p class="divider">ou</p>
                 <p class="option-hint">Jogar com playlist/álbum público (link direto)</p>
             </div>
@@ -77,6 +80,9 @@
                 <span id="user-name">Carregando...</span>
                 <button type="button" id="btn-logout" class="btn btn-ghost btn-sm">Sair</button>
             </div>
+            <button type="button" class="btn btn-ghost btn-daily" data-action="daily">
+                🎯 Desafio Diário
+            </button>
             <!-- Opção 1: Jogar via Link/URL mesmo logado -->
             <form id="select-url-form" class="setup-form">
                 <div class="form-group">
@@ -238,6 +244,7 @@
         <section id="view-summary" class="view" aria-label="Resumo da partida" hidden>
             <header class="view-header">
                 <h1>Fim de Jogo</h1>
+                <p id="daily-label" class="subtitle" hidden></p>
             </header>
             
             <div class="summary-stats">
@@ -252,13 +259,18 @@
             </div>
             
             <div class="rounds-detail" id="rounds-detail"></div>
-            
+
+            <button type="button" id="btn-share" class="btn btn-primary" hidden>
+                Compartilhar resultado
+            </button>
+            <p id="share-feedback" class="help-text" role="status" aria-live="polite" hidden></p>
+
             <button type="button" id="btn-new-game" class="btn btn-primary">
                 Nova Partida
             </button>
         </section>
     </div>
-    
-    <script src="/static/game.js?v=2.1"></script>
+
+    <script src="/static/game.js?v=2.2"></script>
 </body>
 </html>
