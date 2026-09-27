@@ -14,7 +14,11 @@ from app.config import settings
 from app.game_state import deserialize_session
 from app.routes import auth, game
 
-# Configure logging for Render/Cloud deployment
+# Configure logging for Render/Cloud deployment. The root level stays at
+# INFO regardless of LOG_LEVEL to keep third-party library logs quiet; only
+# this app's own diagnostic loggers (matching, token refresh, request
+# tracing) follow LOG_LEVEL, which defaults to INFO and can be raised to
+# DEBUG via the environment when investigating an issue.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -22,10 +26,9 @@ logging.basicConfig(
     force=True,
 )
 
-# Set specific loggers to DEBUG for detailed tracking
-logging.getLogger("app.services.deezer").setLevel(logging.DEBUG)
-logging.getLogger("app.services.spotify").setLevel(logging.DEBUG)
-logging.getLogger("app.routes.game").setLevel(logging.DEBUG)
+_app_log_level = getattr(logging, settings.log_level, logging.INFO)
+for _logger_name in ("app.services.deezer", "app.services.spotify", "app.routes.game"):
+    logging.getLogger(_logger_name).setLevel(_app_log_level)
 
 
 @asynccontextmanager

@@ -243,33 +243,28 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
     }
 
 
-@router.post("/round/guess")
-async def round_guess(
-    request: Request,
-    response: Response,
-    guess: str = Body(..., embed=True),
-) -> dict[str, Any]:
-    state = await _get_game_state(request)
-    if state is None or state.current_track is None:
-        raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
+def _record_attempt(
+    state: GameState, guess_text: str, correct: bool
+) -> tuple[bool, int, bool, dict[str, Any] | None]:
+    """Record one guess/skip attempt against the current round and advance
+    the round/game state accordingly. Shared by /round/guess and
+    /round/skip, which only differ in whether the attempt was correct and
+    what raw guess text (if any) gets stored in the history.
 
-    correct = _normalize(guess) == _normalize(state.current_track.name)
-    normalized_guess = _normalize(guess)
-    expected_name = _normalize(state.current_track.name)
-    expected_full = _normalize(f"{state.current_track.name} - {state.current_track.artist}")
-    correct = normalized_guess == expected_name or normalized_guess == expected_full
+    Returns (round_over, attempt_number, game_over, revealed_track_dump).
+    """
+    assert state.current_track is not None
     clip_duration = CLIP_DURATIONS[state.attempt]
-
     state.guess_history.append(
         GuessRecord(
             attempt=state.attempt + 1,
-            guess=guess,
+            guess=guess_text,
             correct=correct,
             clip_duration_ms=clip_duration,
         )
     )
 
-    # Determine if round is over
+    # A round ends on a correct guess or once every fixed attempt has been used.
     round_over = correct or state.attempt >= 4
     attempt_number = state.attempt + 1
 
@@ -300,6 +295,25 @@ async def round_guess(
         revealed = None
 
     state.updated_at = datetime.now(UTC)
+    return round_over, attempt_number, game_over, revealed
+
+
+@router.post("/round/guess")
+async def round_guess(
+    request: Request,
+    response: Response,
+    guess: str = Body(..., embed=True),
+) -> dict[str, Any]:
+    state = await _get_game_state(request)
+    if state is None or state.current_track is None:
+        raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
+
+    normalized_guess = _normalize(guess)
+    expected_name = _normalize(state.current_track.name)
+    expected_full = _normalize(f"{state.current_track.name} - {state.current_track.artist}")
+    correct = normalized_guess == expected_name or normalized_guess == expected_full
+
+    round_over, attempt_number, game_over, revealed = _record_attempt(state, guess, correct)
 
     session_id = request.cookies.get("game_session")
     assert session_id is not None
@@ -311,7 +325,7 @@ async def round_guess(
         "round_over": round_over,
         "game_over": game_over,
     }
-    if not round_over and not correct:
+    if not round_over:
         result["next_clip_duration_ms"] = CLIP_DURATIONS[state.attempt]
     if revealed:
         result["revealed_track"] = revealed
@@ -325,49 +339,8 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
     if state is None or state.current_track is None:
         raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
 
-    # Skip just advances the attempt without checking correctness
-    clip_duration = CLIP_DURATIONS[state.attempt]
-    state.guess_history.append(
-        GuessRecord(
-            attempt=state.attempt + 1,
-            guess="",
-            correct=False,
-            clip_duration_ms=clip_duration,
-        )
-    )
-
-    # Determine if round is over
-    round_over = state.attempt >= 4
-    attempt_number = state.attempt + 1
-
-    if round_over:
-        # Round ends after 7 attempts (0-indexed, so attempt 6 is the 7th)
-        state.round_history.append(
-            RoundResult(
-                track=state.current_track,
-                guesses=state.guess_history.copy(),
-                correct=False,
-                completed_at=datetime.now(UTC),
-            )
-        )
-        revealed_track = state.current_track
-        state.round_atual += 1
-        state.current_track = None
-        state.attempt = 0
-        state.guess_history = []
-        # Check if game is over: either all rounds played or no more tracks available
-        played_ids = {r.track.deezer_id for r in state.round_history}
-        remaining = [t for t in state.pool if t.deezer_id not in played_ids and t.preview_url]
-        game_over = state.round_atual >= state.rounds_total or len(remaining) == 0
-        revealed: dict[str, Any] | None = (
-            revealed_track.model_dump() if revealed_track else None
-        )
-    else:
-        state.attempt += 1
-        game_over = False
-        revealed = None
-
-    state.updated_at = datetime.now(UTC)
+    # Skip just advances the attempt without ever being "correct".
+    round_over, attempt_number, game_over, revealed = _record_attempt(state, "", False)
 
     session_id = request.cookies.get("game_session")
     assert session_id is not None
@@ -379,7 +352,7 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
         "round_over": round_over,
         "game_over": game_over,
     }
-    if not round_over and not game_over:
+    if not round_over:
         result["next_clip_duration_ms"] = CLIP_DURATIONS[state.attempt]
     if revealed:
         result["revealed_track"] = revealed
