@@ -33,7 +33,7 @@ class TestArtistMatching:
 
 class TestSelectBestMatch:
     def test_empty_list_returns_none(self) -> None:  # noqa: ANN101
-        assert _select_best_match("Artist A", []) is None
+        assert _select_best_match("Artist A", "Song", []) is None
 
     def test_filters_by_artist(self) -> None:  # noqa: ANN101
         candidates = [
@@ -54,7 +54,7 @@ class TestSelectBestMatch:
                 rank=200,
             ),
         ]
-        best = _select_best_match("Artist A", candidates)
+        best = _select_best_match("Artist A", "Song", candidates)
         assert best is not None
         assert best.artist_name == "Artist A"
         assert best.rank == 100
@@ -86,7 +86,7 @@ class TestSelectBestMatch:
                 rank=200,
             ),
         ]
-        best = _select_best_match("Artist A", candidates)
+        best = _select_best_match("Artist A", "Song", candidates)
         assert best is not None
         assert best.rank == 300
 
@@ -101,7 +101,38 @@ class TestSelectBestMatch:
                 rank=500,
             ),
         ]
-        assert _select_best_match("Artist A", candidates) is None
+        assert _select_best_match("Artist A", "Song", candidates) is None
+
+    def test_returns_none_if_title_differs(self) -> None:  # noqa: ANN101
+        """Same artist, but a completely different (more popular) song by
+        them shouldn't be picked just because artist + rank line up."""
+        candidates = [
+            DeezerTrack(
+                id=1,
+                title="A Totally Different Song",
+                artist_name="Artist A",
+                preview_url="",
+                duration=180,
+                rank=999,
+            ),
+        ]
+        assert _select_best_match("Artist A", "Song", candidates) is None
+
+    def test_matches_title_with_remaster_suffix(self) -> None:  # noqa: ANN101
+        """A '(Remastered 2011)'-style suffix shouldn't cause a rejection."""
+        candidates = [
+            DeezerTrack(
+                id=1,
+                title="Song (Remastered 2011)",
+                artist_name="Artist A",
+                preview_url="",
+                duration=180,
+                rank=500,
+            ),
+        ]
+        best = _select_best_match("Artist A", "Song", candidates)
+        assert best is not None
+        assert best.id == 1
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,7 @@
 import logging
 import sys
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -26,7 +27,23 @@ logging.getLogger("app.services.deezer").setLevel(logging.DEBUG)
 logging.getLogger("app.services.spotify").setLevel(logging.DEBUG)
 logging.getLogger("app.routes.game").setLevel(logging.DEBUG)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+    # Fail fast instead of silently signing every session cookie with an
+    # empty key. This only runs when the app is actually served (uvicorn,
+    # the Render process) — tests talk to the app via httpx.ASGITransport,
+    # which never triggers ASGI lifespan events, so this doesn't affect them.
+    if settings.cookie_secure and not settings.session_secret:
+        raise RuntimeError(
+            "SESSION_SECRET não pode estar vazio quando COOKIE_SECURE=true "
+            "(produção). Defina a variável de ambiente SESSION_SECRET antes "
+            "de iniciar o servidor."
+        )
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 if settings.cookie_secure:
     app.add_middleware(HTTPSRedirectMiddleware)
 app.mount("/static", StaticFiles(directory="static"), name="static")

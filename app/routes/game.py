@@ -12,6 +12,7 @@ from app.config import settings
 from app.game_state import (
     create_game_session,
     get_game_session,
+    serialize_session,
     update_game_session,
 )
 from app.models import GameState, GuessRecord, RoundResult
@@ -31,6 +32,37 @@ logger = logging.getLogger(__name__)
 PLAYLIST_ID_REGEX = re.compile(r"playlist/([a-zA-Z0-9]{22})")
 ALBUM_ID_REGEX = re.compile(r"album/([a-zA-Z0-9]{22})")
 CLIP_DURATIONS = [400, 800, 1600, 2000, 2500]
+
+
+def _persist_refreshed_tokens(
+    response: Response,
+    session: dict[str, Any],
+    token_update: dict[str, str],
+) -> None:
+    """If a Spotify access token was refreshed mid-request, write the new
+    token pair back into the auth_session cookie. Without this, a refreshed
+    token is used for the current request only and then discarded — the next
+    request refreshes again from the (still valid) old refresh_token, but if
+    Spotify ever rotates the refresh_token itself, the rotated value is lost
+    and the user gets silently logged out.
+    """
+    if not token_update:
+        return
+    user_tokens = dict(session.get("user_tokens") or {})
+    user_tokens["access_token"] = token_update["access_token"]
+    user_tokens["refresh_token"] = (
+        token_update.get("refresh_token") or user_tokens.get("refresh_token")
+    )
+    session_data = {**session, "user_tokens": user_tokens, "authenticated": True}
+    response.set_cookie(
+        key="auth_session",
+        value=serialize_session(session_data),
+        max_age=60 * 60 * 24 * 7,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
 
 
 def extract_spotify_id(input_str: str) -> tuple[str, str] | None:
@@ -85,11 +117,16 @@ async def game_start(
     if resource_type == "playlist" and spotify_id == "me:liked" and not access_token:
         raise HTTPException(status_code=401, detail="Não autenticado para acessar Músicas Curtidas")
 
+    token_update: dict[str, str] = {}
     try:
         if resource_type == "album":
-            spotify_tracks = await fetch_album_tracks(spotify_id, access_token, refresh_token)
+            spotify_tracks = await fetch_album_tracks(
+                spotify_id, access_token, refresh_token, token_update
+            )
         else:
-            spotify_tracks = await fetch_playlist_tracks(spotify_id, access_token, refresh_token)
+            spotify_tracks = await fetch_playlist_tracks(
+                spotify_id, access_token, refresh_token, token_update
+            )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
     except SpotifyAPIError as e:
@@ -127,6 +164,8 @@ async def game_start(
             exc_info=True,
         )
         raise HTTPException(status_code=500, detail="Erro interno do servidor") from None
+
+    _persist_refreshed_tokens(response, session, token_update)
 
     if not spotify_tracks:
         raise HTTPException(status_code=404, detail="Nenhuma faixa válida encontrada na playlist")
@@ -372,7 +411,7 @@ async def _get_game_state(request: Request) -> GameState | None:
 
 
 @router.get("/user/profile")
-async def get_user_profile_route(request: Request) -> dict[str, Any]:
+async def get_user_profile_route(request: Request, response: Response) -> dict[str, Any]:
     session = getattr(request.state, "session", {})
     user_tokens = session.get("user_tokens")
     if not user_tokens:
@@ -381,8 +420,10 @@ async def get_user_profile_route(request: Request) -> dict[str, Any]:
     access_token = user_tokens.get("access_token")
     refresh_token = user_tokens.get("refresh_token")
 
+    token_update: dict[str, str] = {}
     try:
-        profile = await fetch_user_profile(access_token, refresh_token)
+        profile = await fetch_user_profile(access_token, refresh_token, token_update)
+        _persist_refreshed_tokens(response, session, token_update)
         return profile
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e)) from None
@@ -395,7 +436,7 @@ async def get_user_profile_route(request: Request) -> dict[str, Any]:
 
 
 @router.get("/user/playlists")
-async def get_user_playlists(request: Request) -> list[dict[str, Any]]:
+async def get_user_playlists(request: Request, response: Response) -> list[dict[str, Any]]:
     session = getattr(request.state, "session", {})
     user_tokens = session.get("user_tokens")
     if not user_tokens:
@@ -404,8 +445,10 @@ async def get_user_playlists(request: Request) -> list[dict[str, Any]]:
     access_token = user_tokens.get("access_token")
     refresh_token = user_tokens.get("refresh_token")
 
+    token_update: dict[str, str] = {}
     try:
-        playlists = await fetch_user_playlists(access_token, refresh_token)
+        playlists = await fetch_user_playlists(access_token, refresh_token, token_update)
+        _persist_refreshed_tokens(response, session, token_update)
         # Ensure all playlists have tracks_total field
         for pl in playlists:
             if "tracks_total" not in pl or pl["tracks_total"] is None:

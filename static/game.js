@@ -125,6 +125,18 @@
     const $ = (sel, ctx = document) => ctx.querySelector(sel);
     const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
+    // Escapes untrusted text (track names, artists, playlist names, user
+    // guesses) before it is interpolated into innerHTML. Playlist/track
+    // metadata comes from third parties via the Spotify/Deezer APIs and
+    // must never be treated as safe markup.
+    const escapeHtml = (value) => {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        // textContent->innerHTML escapes &, < and > but not quotes; escape
+        // those too so the value is also safe inside a quoted HTML attribute.
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
+
     const formatTime = (ms) => {
         if (ms < 1000) {
             return `${(ms / 1000).toFixed(1)}s`;
@@ -605,8 +617,8 @@
         const li = document.createElement('li');
         li.className = `guess-log-item ${itemClass}`;
         li.innerHTML = `
-            <span class="guess-log-num">${attemptNumber}</span>
-            <span class="guess-log-text">${displayText}</span>
+            <span class="guess-log-num">${escapeHtml(attemptNumber)}</span>
+            <span class="guess-log-text">${escapeHtml(displayText)}</span>
             <span class="guess-log-icon">${iconSvg}</span>
         `;
         els.guessLogList.appendChild(li);
@@ -777,13 +789,13 @@
                     <span class="round-outcome">${round.correct ? 'Acertou' : 'Errou'}</span>
                 </div>
                 <div class="round-track">
-                    <span class="round-track-name">${round.track?.name || 'Música'}</span>
-                    <span class="round-track-artist">${round.track?.artist || ''}</span>
+                    <span class="round-track-name">${escapeHtml(round.track?.name || 'Música')}</span>
+                    <span class="round-track-artist">${escapeHtml(round.track?.artist || '')}</span>
                 </div>
                 <div class="round-guesses">
                     ${(round.guesses || []).map(g => `
                         <span class="guess-tag ${g.correct ? 'correct' : ''}">
-                            ${g.attempt}. ${g.guess}
+                            ${escapeHtml(g.attempt)}. ${escapeHtml(g.guess)}
                         </span>
                     `).join('')}
                 </div>
@@ -806,10 +818,10 @@
             const imgUrl = pl.images?.[0]?.url || '';
             const trackCount = pl.tracks_total || 0;
             li.innerHTML = `
-                ${imgUrl ? `<img src="${imgUrl}" alt="" loading="lazy">` : '<div class="playlist-placeholder" style="width:56px;height:56px;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:20px;">🎵</div>'}
+                ${imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="" loading="lazy">` : '<div class="playlist-placeholder" style="width:56px;height:56px;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:20px;">🎵</div>'}
                 <div class="playlist-info">
-                    <span class="playlist-name">${pl.name}</span>
-                    <span class="playlist-meta">${trackCount} faixas ${pl.public ? '• Pública' : '• Privada'}</span>
+                    <span class="playlist-name">${escapeHtml(pl.name)}</span>
+                    <span class="playlist-meta">${escapeHtml(trackCount)} faixas ${pl.public ? '• Pública' : '• Privada'}</span>
                 </div>
                 <svg class="playlist-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
             `;

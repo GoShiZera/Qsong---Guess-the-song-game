@@ -55,8 +55,12 @@ async def callback(
         token_data = await exchange_code_for_tokens(code)
         logger.info("Successfully exchanged code for tokens")
     except Exception as e:
+        # Keep the exception detail server-side only (it can include Spotify's
+        # raw error response); the client only gets a generic message.
         logger.error(f"Failed to exchange code: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to exchange code: {e}") from None
+        raise HTTPException(
+            status_code=400, detail="Falha ao autenticar com o Spotify. Tente novamente."
+        ) from None
 
     access_token = token_data["access_token"]
     refresh_token = token_data.get("refresh_token")
