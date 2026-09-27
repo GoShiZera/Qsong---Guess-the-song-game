@@ -1021,7 +1021,6 @@
 
             // Check if round is over using explicit round_over flag or revealed_track
             const isRoundOver = data.round_over || Boolean(data.revealed_track) || data.correct;
-            const isGameOver = data.game_over || state.roundNumber >= state.totalRounds;
             
             // Increment correct/wrong counters
             if (data.correct) {
@@ -1035,6 +1034,7 @@
 
             if (isRoundOver) {
                 state.roundNumber++;
+                const isGameOver = Boolean(data.game_over) || state.roundNumber > state.totalRounds;
                 showRoundResult(data, trackName, isGameOver);
             } else {
                 // Remove incorrect guess from datalist so player sees only remaining options
@@ -1076,7 +1076,6 @@
 
             // Check if round is over using explicit round_over flag or revealed_track
             const isRoundOver = data.round_over || Boolean(data.revealed_track);
-            const isGameOver = data.game_over || state.roundNumber >= state.totalRounds;
             
             // Increment wrong counter if round is over
             if (isRoundOver) {
@@ -1088,6 +1087,7 @@
 
             if (isRoundOver) {
                 state.roundNumber++;
+                const isGameOver = Boolean(data.game_over) || state.roundNumber > state.totalRounds;
                 showRoundResult(data, trackName, isGameOver);
             } else {
                 setTimeout(async () => {
@@ -1270,16 +1270,32 @@
         });
 
         // New game button
-        els.btnNewGame.addEventListener('click', () => {
+        els.btnNewGame.addEventListener('click', async () => {
             state.pool = [];
             state.currentTrack = null;
             state.roundHistory = [];
             state.selectedPlaylistId = null;
-            els.setupForm.hidden = false;
+            state.roundNumber = 1;
+            state.correctCount = 0;
+            state.wrongCount = 0;
             els.playlistInput.value = '';
             els.roundsInput.value = '';
             els.btnStart.disabled = true;
             hideError(els.setupError);
+            // Verificar se o usuário está autenticado no Spotify
+            try {
+                const profile = await api.getUserProfile();
+                if (profile && profile.display_name) {
+                    window.history.pushState(null, '', '/select-playlist');
+                    showView('selectPlaylist');
+                    loadUserPlaylists();
+                    return;
+                }
+            } catch {
+                // Não autenticado, segue para setup padrão
+            }
+            window.history.pushState(null, '', '/');
+            els.setupForm.hidden = false;
             showView('setup');
             els.playlistInput.focus();
         });
