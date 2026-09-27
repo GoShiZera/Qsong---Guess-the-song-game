@@ -5,7 +5,7 @@
     --bg-card: #242424;
     --text-primary: #ffffff;
     --text-secondary: #b3b3b3;
-    --text-muted: #727272;
+    --text-muted: #929292; /* ≥4.5:1 on every surface, incl. #282828 inputs */
     --accent-green: #1db954;
     --accent-green-hover: #1ed760;
     --accent-green-dim: rgba(29, 185, 84, 0.2);
@@ -25,7 +25,9 @@
     --font-mono: 'SF Mono', 'Fira Code', monospace;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -66,8 +68,15 @@ body {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Typography */
@@ -209,6 +218,14 @@ input::placeholder {
     transition: background var(--transition-fast), transform var(--transition-fast);
 }
 
+/* Inline SVG glyph inside a button; inherits the button's text color. */
+.btn-glyph {
+    width: 20px;
+    height: 20px;
+    display: block;
+    flex-shrink: 0;
+}
+
 .btn-icon:not(:disabled):hover {
     background: var(--bg-card);
     transform: scale(1.1);
@@ -229,8 +246,16 @@ input::placeholder {
     animation: spin 0.8s linear infinite;
 }
 
+/* Same as .user-profile: display above would override the hidden attribute. */
+.btn-loader[hidden],
+.btn-text[hidden] {
+    display: none;
+}
+
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Setup View */
@@ -297,9 +322,19 @@ input::placeholder {
 }
 
 @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-4px); }
-    75% { transform: translateX(4px); }
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    25% {
+        transform: translateX(-4px);
+    }
+
+    75% {
+        transform: translateX(4px);
+    }
 }
 
 /* Game Header */
@@ -416,13 +451,11 @@ input::placeholder {
     left: 0;
     right: 0;
     bottom: 0;
-    background: repeating-linear-gradient(
-        90deg,
-        transparent,
-        transparent 2px,
-        rgba(29, 185, 84, 0.15) 2px,
-        rgba(29, 185, 84, 0.15) 4px
-    );
+    background: repeating-linear-gradient(90deg,
+            transparent,
+            transparent 2px,
+            rgba(29, 185, 84, 0.15) 2px,
+            rgba(29, 185, 84, 0.15) 4px);
     animation: waveformMove 2s linear infinite;
     opacity: 0;
     transition: opacity var(--transition-normal);
@@ -433,8 +466,13 @@ input::placeholder {
 }
 
 @keyframes waveformMove {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-20px); }
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-20px);
+    }
 }
 
 .player-controls {
@@ -552,34 +590,87 @@ input::placeholder {
     color: var(--text-muted);
 }
 
-/* Round Result - Inside Player */
+/* Round Result */
 .round-result {
     background: var(--bg-secondary);
-    border-radius: var(--radius-md);
-    padding: 16px;
+    border-radius: var(--radius-lg);
+    padding: 20px;
     animation: slideUp var(--transition-normal) ease;
-    width: 100%;
 }
 
 @keyframes slideUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
+.result-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.result-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.result-content.correct .result-icon {
+    background: var(--accent-green-dim);
+    color: var(--accent-green);
+}
+
+.result-content.wrong .result-icon {
+    background: var(--accent-red-dim);
+    color: var(--accent-red);
+}
+
+.result-title {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.result-content.correct .result-title {
+    color: var(--accent-green);
+}
+
+.result-content.wrong .result-title {
+    color: var(--accent-red);
+}
+
+.result-track {
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.result-track-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.result-track-artist {
+    color: var(--text-secondary);
+}
+
+/* Round result card as rendered by index.html (cover + info + next button) */
 .result-content {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
     gap: 12px;
-}
-
-.result-content.correct {
-    border-left: 4px solid var(--accent-green);
-}
-
-.result-content.wrong {
-    border-left: 4px solid var(--accent-red);
 }
 
 .result-cover {
@@ -599,30 +690,28 @@ input::placeholder {
 }
 
 .result-status {
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     padding: 4px 10px;
     border-radius: var(--radius-full);
     width: fit-content;
     align-self: center;
 }
 
-.result-content.correct .result-status {
+.round-result.correct .result-status {
     background: var(--accent-green-dim);
     color: var(--accent-green);
 }
 
-.result-content.wrong .result-status {
+.round-result.wrong .result-status {
     background: var(--accent-red-dim);
     color: var(--accent-red);
 }
 
-.result-track-name {
+.result-info .result-track-name {
     font-weight: 700;
     font-size: 1rem;
-    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -645,28 +734,22 @@ input::placeholder {
         flex-direction: row;
         text-align: left;
     }
-    
+
     .result-cover {
         width: 72px;
         height: 72px;
     }
-    
+
     .result-status {
         align-self: flex-start;
     }
-    
+
     .btn-next-round {
         width: auto;
         max-width: none;
-        align-self: flex-end;
-        margin-top: auto;
+        margin-top: 0;
+        margin-left: auto;
     }
-}
-
-/* Clip Info & Waveform hidden states */
-.clip-info.hidden,
-.waveform.hidden {
-    display: none;
 }
 
 /* Summary View */
@@ -824,27 +907,27 @@ input::placeholder {
     #app {
         padding: 16px 12px;
     }
-    
+
     h1 {
         font-size: 1.5rem;
     }
-    
+
     .stat-value {
         font-size: 2.5rem;
     }
-    
+
     .attempt-box {
         max-width: 32px;
     }
-    
+
     .player-controls {
         gap: 12px;
     }
-    
+
     .progress-wrapper {
         gap: 8px;
     }
-    
+
     .time-current,
     .time-total {
         min-width: 32px;
@@ -854,7 +937,10 @@ input::placeholder {
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after {
+
+    *,
+    *::before,
+    *::after {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
@@ -867,7 +953,7 @@ input::placeholder {
         --border-color: #555555;
         --text-secondary: #cccccc;
     }
-    
+
     .btn-primary {
         border: 2px solid var(--text-primary);
     }
@@ -916,17 +1002,53 @@ input::placeholder {
     outline-offset: 2px;
 }
 
+/* Secondary pill paired with .btn-spotify: same footprint, outlined instead
+   of filled, so the green stays reserved for the primary action. */
+.btn-daily {
+    display: flex;
+    width: 100%;
+    max-width: 320px;
+    padding: 15px 24px;
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--text-muted);
+    font-size: 1rem;
+    font-weight: 700;
+    transition: border-color var(--transition-fast), background var(--transition-fast),
+        transform var(--transition-fast);
+}
+
+.btn-daily:not(:disabled):hover {
+    border-color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+    transform: scale(1.02);
+}
+
+.btn-daily:not(:disabled):active {
+    transform: scale(0.98);
+}
+
+.btn-daily:focus-visible {
+    outline: 2px solid var(--accent-green);
+    outline-offset: 2px;
+}
+
+/* On the playlist screen it sits alone between the profile and the URL form. */
+#view-select-playlist .btn-daily {
+    margin: 0 auto 20px;
+}
+
+/* Rules flank the text and shrink to fit it, so longer labels
+   ("ou escolha uma de suas playlists") never get struck through. */
 .divider {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 14px;
+    gap: 12px;
+    width: 100%;
     color: var(--text-muted);
     font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.02em;
     margin: 8px 0;
-    white-space: nowrap;
 }
 
 .divider::before,
@@ -935,7 +1057,6 @@ input::placeholder {
     flex: 1;
     height: 1px;
     background: var(--border-color);
-    min-width: 0;
 }
 
 .option-hint {
@@ -953,6 +1074,12 @@ input::placeholder {
     background: var(--bg-secondary);
     border-radius: var(--radius-md);
     margin-bottom: 16px;
+}
+
+/* display:flex above would otherwise override the `hidden` attribute and show
+   an empty "Carregando…" card with a broken avatar before login. */
+.user-profile[hidden] {
+    display: none;
 }
 
 .user-profile img {
@@ -1067,14 +1194,7 @@ input::placeholder {
     background: var(--bg-tertiary);
 }
 
-/* Empty state */
-.playlists-empty {
-    text-align: center;
-    padding: 32px;
-    color: var(--text-muted);
-}
-
-/* Select Playlist Config */
+/* Select Playlist Config (rounds + start, shown after picking a playlist) */
 .select-playlist-config {
     margin-top: 24px;
     padding: 20px;
@@ -1092,8 +1212,17 @@ input::placeholder {
     width: 100%;
 }
 
+/* Empty state */
+.playlists-empty {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-muted);
+}
+
+/* Responsive adjustments for setup options */
 @media (max-width: 480px) {
-    .btn-spotify {
+    .btn-spotify,
+    .btn-daily {
         max-width: none;
     }
 }
@@ -1106,6 +1235,7 @@ input::placeholder {
     padding: 16px 20px;
     animation: slideUp var(--transition-normal) ease;
 }
+
 .guess-log-title {
     font-size: 0.72rem;
     font-weight: 600;
@@ -1114,12 +1244,14 @@ input::placeholder {
     color: var(--text-muted);
     margin-bottom: 12px;
 }
+
 .guess-log-list {
     list-style: none;
     display: flex;
     flex-direction: column;
     gap: 6px;
 }
+
 .guess-log-item {
     display: flex;
     align-items: center;
@@ -1130,19 +1262,23 @@ input::placeholder {
     font-size: 0.88rem;
     animation: fadeIn var(--transition-fast) ease;
 }
+
 .guess-log-item.correct {
     background: var(--accent-green-dim);
     border: 1px solid rgba(29, 185, 84, 0.3);
 }
+
 .guess-log-item.wrong {
     background: var(--accent-red-dim);
     border: 1px solid rgba(229, 57, 53, 0.15);
 }
+
 .guess-log-item.skipped {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     opacity: 0.7;
 }
+
 .guess-log-num {
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -1152,6 +1288,7 @@ input::placeholder {
     text-align: center;
     flex-shrink: 0;
 }
+
 .guess-log-text {
     flex: 1;
     font-weight: 500;
@@ -1160,31 +1297,46 @@ input::placeholder {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
 .guess-log-item.correct .guess-log-text {
     color: var(--accent-green);
 }
+
 .guess-log-item.skipped .guess-log-text {
     color: var(--text-muted);
     font-style: italic;
 }
+
 .guess-log-icon {
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
 }
+
 .guess-log-icon svg {
     width: 14px;
     height: 14px;
 }
-.guess-log-item.correct .guess-log-icon { color: var(--accent-green); }
-.guess-log-item.wrong   .guess-log-icon { color: var(--accent-red); }
-.guess-log-item.skipped .guess-log-icon { color: var(--text-muted); }
+
+.guess-log-item.correct .guess-log-icon {
+    color: var(--accent-green);
+}
+
+.guess-log-item.wrong .guess-log-icon {
+    color: var(--accent-red);
+}
+
+.guess-log-item.skipped .guess-log-icon {
+    color: var(--text-muted);
+}
+
 /* Responsivo */
 @media (max-width: 480px) {
     .guess-log {
         padding: 12px 14px;
     }
+
     .guess-log-item {
         padding: 7px 10px;
         font-size: 0.84rem;
@@ -1219,7 +1371,7 @@ input::placeholder {
     outline-offset: 2px;
 }
 
-/* ===== Botão de Play (.btn-play) - Spotify Style ===== */
+/* ===== Botão de Play (.btn-play) ===== */
 .btn-play {
     display: inline-flex;
     align-items: center;
@@ -1234,42 +1386,36 @@ input::placeholder {
     cursor: pointer;
     transition: all var(--transition-fast);
     flex-shrink: 0;
-    box-shadow: 0 4px 14px rgba(29, 185, 84, 0.4);
 }
 
 .btn-play:not(:disabled):hover {
     background: var(--accent-green-hover);
     transform: scale(1.06);
-    box-shadow: 0 6px 20px rgba(30, 215, 96, 0.5);
 }
 
 .btn-play:not(:disabled):active {
     transform: scale(0.96);
 }
 
-.btn-play:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 4px var(--accent-green-dim), 0 4px 14px rgba(29, 185, 84, 0.4);
-}
-
 .btn-play:disabled {
     opacity: 0.35;
     cursor: not-allowed;
     transform: none;
-    box-shadow: none;
 }
 
+.btn-play:focus-visible {
+    outline: 2px solid var(--accent-green);
+    outline-offset: 3px;
+}
+
+/* SVG elements ignore the HTML `hidden` attribute, so the play/pause swap
+   is driven by the .playing class that game.js toggles. */
 .btn-play .icon-play {
     display: block;
     transform: translateX(1px);
-    transition: opacity var(--transition-fast);
 }
 
-.btn-play .icon-pause {
-    display: none;
-    transition: opacity var(--transition-fast);
-}
-
+.btn-play .icon-pause,
 .btn-play.playing .icon-play {
     display: none;
 }
@@ -1285,18 +1431,19 @@ input::placeholder {
     font-weight: 700;
 }
 
+/* Deeper than --accent-red so white label text clears 4.5:1. */
 .btn-danger {
-    background: var(--accent-red);
+    background: #c62828;
     color: #ffffff;
     border: none;
 }
 
 .btn-danger:hover {
-    background: #d32f2f;
+    background: #b71c1c;
     transform: scale(1.02);
 }
 
-/* ===== Modal Overlay ===== */
+/* ===== Modal Overlay (confirmar saída da partida) ===== */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -1326,8 +1473,15 @@ input::placeholder {
 }
 
 @keyframes scaleUp {
-    from { opacity: 0; transform: scale(0.92); }
-    to { opacity: 1; transform: scale(1); }
+    from {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 .modal-title {
@@ -1359,7 +1513,11 @@ input::placeholder {
 
 /* Print */
 @media print {
-    .btn, .guess-form, .player-controls, .attempts-tracker {
+
+    .btn,
+    .guess-form,
+    .player-controls,
+    .attempts-tracker {
         display: none !important;
     }
 }
