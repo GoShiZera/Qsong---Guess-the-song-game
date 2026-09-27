@@ -14,6 +14,9 @@
     // ---------- State ----------
     const state = {
         view: 'setup',
+        mode: 'normal',   // 'normal' | 'daily'
+        daily: null,      // { date, number } while in daily mode
+        dailyRounds: null, // [{ correct, attempts }] for the share text
         pool: [],
         currentTrack: null,
         startOffset: 0,
@@ -110,6 +113,10 @@
         finalWrong: document.getElementById('final-wrong'),
         roundsDetail: document.getElementById('rounds-detail'),
         btnNewGame: document.getElementById('btn-new-game'),
+        btnShare: document.getElementById('btn-share'),
+        shareFeedback: document.getElementById('share-feedback'),
+        dailyLabel: document.getElementById('daily-label'),
+        dailyButtons: document.querySelectorAll('[data-action="daily"]'),
 
         // Round Result
         resultCover: document.getElementById('result-cover'),
@@ -486,6 +493,20 @@
             });
             return handleResponse(res);
         },
+
+        async dailyInfo() {
+            const res = await fetch(`${API_BASE}/daily/info`, {
+                credentials: 'include',
+            });
+            return handleResponse(res);
+        },
+
+        async startDaily() {
+            const res = await fetch(`${API_BASE}/daily/start`, {
+                credentials: 'include',
+            });
+            return handleResponse(res);
+        },
     };
 
     const handleResponse = async (res) => {
@@ -834,6 +855,7 @@
     };
 
     const startNewGame = async (playlistId, rounds) => {
+        state.mode = 'normal';
         hideError(els.setupError);
         els.setupForm.hidden = true;
         els.setupProgress.hidden = false;
@@ -871,6 +893,7 @@
     };
 
     const startGameFromPlaylist = async (playlistId, rounds = null) => {
+        state.mode = 'normal';
         state.selectedPlaylistId = playlistId;
         hideError(els.playlistsError);
         els.playlistsList.hidden = true;
@@ -1065,16 +1088,118 @@
     const finishGame = async () => {
         try {
             const summary = await api.summary();
-            renderSummary(summary);
-            showView('summary');
+            if (state.mode === 'daily' && state.daily) {
+                saveDailyResult(state.daily.date, { number: state.daily.number, summary });
+            }
+            showSummary(summary);
         } catch (err) {
             console.error('Summary error:', err);
-            renderSummary({
+            showSummary({
                 acertos: state.correctCount,
                 erros: state.wrongCount,
                 rounds: state.roundHistory,
             });
-            showView('summary');
+        }
+    };
+
+    const showSummary = (summary) => {
+        renderSummary(summary);
+        const isDaily = state.mode === 'daily' && Boolean(state.daily);
+        els.dailyLabel.hidden = !isDaily;
+        els.btnShare.hidden = !isDaily;
+        els.shareFeedback.hidden = true;
+        if (isDaily) {
+            els.dailyLabel.textContent = `Desafio Diário #${state.daily.number}`;
+            state.dailyRounds = (summary.rounds || []).map(r => ({
+                correct: Boolean(r.correct),
+                attempts: (r.guesses || []).length,
+            }));
+        }
+        showView('summary');
+    };
+
+    // ---------- Daily Challenge ----------
+    // One play per day is enforced per browser via localStorage. The entry is
+    // written when the challenge starts (so abandoning/reloading mid-game
+    // doesn't allow a replay) and completed with the summary at the end.
+    const DAILY_STORAGE_PREFIX = 'qsong-daily-';
+
+    const loadDailyResult = (date) => {
+        try {
+            const raw = localStorage.getItem(DAILY_STORAGE_PREFIX + date);
+            return raw ? JSON.parse(raw) : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const saveDailyResult = (date, result) => {
+        try {
+            localStorage.setItem(DAILY_STORAGE_PREFIX + date, JSON.stringify(result));
+        } catch {
+            // Storage unavailable (private mode, blocked): the game still works.
+        }
+    };
+
+    // Wordle-style grid: one row per round, one square per attempt.
+    const buildShareText = (number, rounds) => {
+        const hits = rounds.filter(r => r.correct).length;
+        const rows = rounds.map(r => {
+            const misses = r.correct ? r.attempts - 1 : r.attempts;
+            const used = misses + (r.correct ? 1 : 0);
+            return '⬛'.repeat(misses)
+                + (r.correct ? '🟩' : '')
+                + '⬜'.repeat(Math.max(0, MAX_ATTEMPTS - used));
+        });
+        return [`Qsong #${number} 🎵 ${hits}/${rounds.length}`, ...rows].join('\n');
+    };
+
+    const handleShare = async () => {
+        if (!state.daily || !state.dailyRounds) return;
+        const text = buildShareText(state.daily.number, state.dailyRounds);
+        try {
+            await navigator.clipboard.writeText(text);
+            els.shareFeedback.textContent = 'Resultado copiado!';
+            els.shareFeedback.hidden = false;
+        } catch {
+            window.prompt('Copie seu resultado:', text);
+        }
+    };
+
+    const setDailyButtonsDisabled = (disabled) => {
+        els.dailyButtons.forEach(btn => { btn.disabled = disabled; });
+    };
+
+    const startDailyGame = async () => {
+        const errorEl = state.view === 'selectPlaylist' ? els.playlistsError : els.setupError;
+        hideError(errorEl);
+        setDailyButtonsDisabled(true);
+        try {
+            const info = await api.dailyInfo();
+            const saved = loadDailyResult(info.date);
+            if (saved?.summary) {
+                state.mode = 'daily';
+                state.daily = info;
+                showSummary(saved.summary);
+                return;
+            }
+            if (saved) {
+                showError(errorEl, 'Você já começou o desafio de hoje. Volte amanhã!');
+                return;
+            }
+
+            const data = await api.startDaily();
+            state.mode = 'daily';
+            state.daily = data.daily;
+            saveDailyResult(data.daily.date, { number: data.daily.number, summary: null });
+            await _applyGameStartResult(data);
+        } catch (err) {
+            console.error('Daily start error:', err);
+            state.mode = 'normal';
+            state.daily = null;
+            showError(errorEl, 'Não foi possível carregar o desafio de hoje. Tente novamente.');
+        } finally {
+            setDailyButtonsDisabled(false);
         }
     };
 
@@ -1210,8 +1335,15 @@
             }
         });
 
+        // Daily challenge
+        els.dailyButtons.forEach(btn => btn.addEventListener('click', startDailyGame));
+        els.btnShare?.addEventListener('click', handleShare);
+
         // New game button
         els.btnNewGame.addEventListener('click', async () => {
+            state.mode = 'normal';
+            state.daily = null;
+            state.dailyRounds = null;
             state.pool = [];
             state.currentTrack = null;
             state.roundHistory = [];

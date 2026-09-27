@@ -12,7 +12,7 @@ from starlette.responses import Response
 
 from app.config import settings
 from app.game_state import deserialize_session
-from app.routes import auth, game
+from app.routes import auth, daily, game
 
 # Configure logging for Render/Cloud deployment. The root level stays at
 # INFO regardless of LOG_LEVEL to keep third-party library logs quiet; only
@@ -62,6 +62,13 @@ async def select_playlist_page() -> FileResponse:
     return FileResponse(Path("static/index.html"))
 
 
+# Browsers and link unfurlers request /favicon.ico at the root regardless of
+# the <link rel="icon"> tags; serve the generated .ico instead of a 404.
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> FileResponse:
+    return FileResponse(Path("static/favicon.ico"), media_type="image/x-icon")
+
+
 @app.middleware("http")
 async def session_middleware(
     request: Request,
@@ -75,3 +82,4 @@ async def session_middleware(
 
 app.include_router(auth.router)
 app.include_router(game.router)
+app.include_router(daily.router)

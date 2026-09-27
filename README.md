@@ -21,6 +21,20 @@
 **Por que não usar só o Spotify para áudio?**  
 O campo `preview_url` da Web API do Spotify foi descontinuado/restringido (nov/2024). Por isso: **Spotify = metadados (nome, artista, duração) + auth do usuário** • **Deezer = áudio (preview 30s)**.
 
+### 🎯 Desafio Diário
+Todo dia, **as mesmas 5 músicas para todos os jogadores**, tiradas das mais tocadas no mundo, na mesma mecânica do jogo normal. Não precisa de login.
+- **Fonte:** playlist editorial **"Top Worldwide"** da Deezer (Deezer Charts). O `/chart/0` da Deezer não serve porque é geolocalizado pelo IP de quem chama, e o Top 50 do Spotify é playlist editorial, bloqueada para apps em modo de desenvolvimento.
+- **Sorteio:** determinístico pela data no horário de Brasília (UTC-3): mesmas faixas, mesma ordem, mesmo trecho inicial para todo mundo. O desafio #1 é de 27/09/2026.
+- **Autocomplete:** lista as 50 faixas do chart, não só as 5 do dia, para não entregar as respostas.
+- **Uma jogada por dia:** controlada no navegador via `localStorage`, marcada assim que o desafio começa. Dá para burlar limpando os dados do navegador, o que é aceito.
+- **Compartilhar:** ao final, o resultado é copiado como uma grade estilo Wordle (⬛ erro/pulo, 🟩 acerto, ⬜ tentativa não usada), por exemplo:
+  ```
+  Qsong #1 🎵 3/5
+  🟩⬜⬜⬜⬜
+  ⬛⬛🟩⬜⬜
+  ⬛⬛⬛⬛⬛
+  ```
+
 ---
 
 ## 🕹️ Como Jogar / Controles
@@ -230,6 +244,12 @@ Qsong/
 | `GET` | `/user/profile` | Perfil do usuário logado (nome, avatar) |
 | `GET` | `/user/playlists` | Lista playlists do usuário (inclui "Músicas Curtidas") |
 
+### Desafio Diário (sem login)
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| `GET` | `/daily/info` | `{date, number}` do desafio de hoje, sem chamar a Deezer. Usado para checar o `localStorage` antes de iniciar |
+| `GET` | `/daily/start` | Cria a partida do dia (5 rodadas com faixa e trecho pré-definidos), seta o cookie `game_session` e retorna `{tracks (50 do chart, para o autocomplete), total, rounds_total, daily: {date, number}}`. As rodadas usam os mesmos `/round/*` do jogo normal |
+
 > **Segurança:** A resposta correta **nunca** vai ao client antes da revelação. Comparação 100% no backend (estado em memória via cookie assinado `game_session`).
 
 ---
@@ -247,6 +267,7 @@ Qsong/
 | **Sessão de jogo** | Cookie `game_session` assinado (7 dias) guarda apenas o ID da sessão; o `GameState` em si fica em memória no processo — **não sobrevive** a um restart/cold start do servidor |
 | **Sessão de auth** | Cookie `auth_session` assinado (7 dias) com tokens do usuário |
 | **Anti-trapaça** | Resposta comparada só no backend; preview_url só enviado ao client no round |
+| **Preview renovado por rodada** | URLs de preview da Deezer expiram ~15 min após emitidas; o `/round/start` pede uma URL recém-assinada via `/track/{id}` (fallback: a URL guardada) |
 | **HTTPS/Cookies** | `COOKIE_SECURE=true` (padrão/produção) → HTTPSRedirect + cookies Secure; `false` (local) → HTTP OK |
 
 ---
@@ -259,6 +280,7 @@ Qsong/
 | **Rate limit Spotify** | Falha ao buscar playlist | Cache token app 55min + retry com backoff; auto-refresh user token |
 | **Rate limit Deezer (paralelo)** | Matching falha/parcial | Semáforo 10 req simultâneas + retry exponencial (3x) |
 | **Cold start Render (15min)** | Perde partida em andamento | Nenhuma hoje — o `GameState` fica só em memória. Mitigação futura: serializar o estado no próprio cookie ou usar um KV externo |
+| **Restart no meio do dia (desafio diário)** | O chart do dia é buscado na primeira requisição e congelado em memória; se o servidor reiniciar e a playlist "Top Worldwide" já tiver mudado, o sorteio do dia pode sair diferente | Aceito. Mitigação futura: persistir o snapshot do dia |
 | **CSP bloqueia fetch Deezer** | Áudio não toca | Documentar `connect-src *.dzcdn.net` |
 | **Redirect URI mismatch** | OAuth falha | Configurar URIs corretas no Spotify Dashboard (prod + local) |
 
