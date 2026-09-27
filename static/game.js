@@ -668,10 +668,9 @@
         els.btnPlayPause.disabled = false;
     };
 
-    const showRoundResult = (data, trackName) => {
+    const showRoundResult = (data, trackName, isGameOver = false) => {
         const isCorrect = data.correct;
         const isRoundOver = data.round_over || data.game_over || Boolean(data.revealed_track);
-        const isGameOver = data.game_over || state.roundNumber >= state.totalRounds;
         
         let displayTrackName = '';
         let displayArtist = '';
@@ -1036,7 +1035,7 @@
 
             if (isRoundOver) {
                 state.roundNumber++;
-                showRoundResult(data, trackName);
+                showRoundResult(data, trackName, isGameOver);
             } else {
                 // Remove incorrect guess from datalist so player sees only remaining options
                 removeTrackFromDatalist(guessText);
@@ -1089,7 +1088,7 @@
 
             if (isRoundOver) {
                 state.roundNumber++;
-                showRoundResult(data, trackName);
+                showRoundResult(data, trackName, isGameOver);
             } else {
                 setTimeout(async () => {
                     setGameControlsEnabled(true);
