@@ -9,7 +9,11 @@ import httpx
 from app.models import DeezerTrack, PlayableTrack, SpotifyTrack
 
 _DEEZER_SEARCH_URL = "https://api.deezer.com/search"
-_DEEZER_GLOBAL_CHART_URL = "https://api.deezer.com/chart/0/tracks"
+# Deezer's editorial "Top Worldwide" playlist (by "Deezer Charts"). Not
+# /chart/0, which is geolocated by the caller's IP (a server in the US would
+# get the US chart, a local dev machine in Brazil the Brazilian one).
+_DEEZER_GLOBAL_CHART_URL = "https://api.deezer.com/playlist/3155776842/tracks"
+_DEEZER_TRACK_URL = "https://api.deezer.com/track/{track_id}"
 _SEMAPHORE = asyncio.Semaphore(10)
 _MAX_RETRIES = 3
 _BASE_DELAY = 0.5
@@ -114,6 +118,25 @@ async def fetch_global_chart(limit: int = 50) -> list[PlayableTrack]:
         )
     logger.info("fetch_global_chart: %d playable tracks", len(tracks))
     return tracks
+
+
+async def fetch_fresh_preview(track_id: int) -> str | None:
+    """Get a freshly signed preview URL for a Deezer track.
+
+    Deezer preview URLs carry a signed `hdnea=exp=...` token that expires
+    ~15 minutes after they're issued, so URLs captured when a game (or the
+    day's challenge) was built can't be trusted by the time a round starts.
+    Returns None on any failure so callers can fall back to the stored URL.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(_DEEZER_TRACK_URL.format(track_id=track_id))
+            resp.raise_for_status()
+            preview = resp.json().get("preview")
+    except Exception:
+        logger.warning("Could not refresh preview for Deezer track %s", track_id)
+        return None
+    return preview if _has_valid_preview(preview) else None
 
 
 def _normalize_artist(name: str) -> str:

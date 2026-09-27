@@ -16,7 +16,7 @@ from app.game_state import (
     update_game_session,
 )
 from app.models import GameState, GuessRecord, RoundResult
-from app.services.deezer import match_spotify_to_deezer
+from app.services.deezer import fetch_fresh_preview, match_spotify_to_deezer
 from app.services.spotify import (
     SpotifyAPIError,
     fetch_album_tracks,
@@ -236,6 +236,14 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
         preview_duration = min(track.duration_ms, 30000)
         max_offset = max(0, preview_duration - 2500)
         start_offset = random.randint(0, max_offset)
+
+    # Deezer preview URLs expire ~15 min after being issued; refresh it now so
+    # later rounds (and the whole day's daily challenge) still play. Spotify-
+    # sourced tracks use negative ids and keep their stored URL.
+    if track.deezer_id > 0:
+        fresh = await fetch_fresh_preview(track.deezer_id)
+        if fresh:
+            track = track.model_copy(update={"preview_url": fresh})
 
     state.current_track = track
     state.start_offset_ms = start_offset

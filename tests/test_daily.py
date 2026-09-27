@@ -135,6 +135,23 @@ async def test_daily_game_follows_planned_rounds() -> None:
 
 
 @pytest.mark.asyncio
+async def test_round_start_uses_refreshed_preview(no_preview_refresh: AsyncMock) -> None:
+    """Deezer preview URLs expire ~15 min after issue, so round_start must hand
+    out a freshly signed one, and the revealed track must carry it too."""
+    no_preview_refresh.return_value = "https://dzcdn.net/fresh.mp3?hdnea=exp=new"
+    chart = _chart(50)
+    with patch("app.daily.fetch_global_chart", AsyncMock(return_value=chart)), \
+         patch("app.daily.today_brt", return_value=DAY):
+        async with await _make_client() as client:
+            await client.get("/daily/start")
+            resp = await client.post("/round/start")
+            assert resp.json()["preview_url"] == "https://dzcdn.net/fresh.mp3?hdnea=exp=new"
+            for _ in range(5):
+                resp = await client.post("/round/skip")
+            assert resp.json()["revealed_track"]["preview_url"].endswith("exp=new")
+
+
+@pytest.mark.asyncio
 async def test_daily_start_deezer_error() -> None:
     import httpx
 
