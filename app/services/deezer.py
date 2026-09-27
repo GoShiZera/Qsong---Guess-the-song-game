@@ -9,6 +9,7 @@ import httpx
 from app.models import DeezerTrack, PlayableTrack, SpotifyTrack
 
 _DEEZER_SEARCH_URL = "https://api.deezer.com/search"
+_DEEZER_GLOBAL_CHART_URL = "https://api.deezer.com/chart/0/tracks"
 _SEMAPHORE = asyncio.Semaphore(10)
 _MAX_RETRIES = 3
 _BASE_DELAY = 0.5
@@ -73,6 +74,46 @@ async def search_track(artist: str, title: str) -> list[DeezerTrack]:
                 raise
 
     return []
+
+
+async def fetch_global_chart(limit: int = 50) -> list[PlayableTrack]:
+    """Fetch Deezer's global top-tracks chart as playable tracks.
+
+    Uses `title_short` (no "(feat. X)"/version suffix) as the name to guess,
+    and drops any track without a preview.
+    """
+    params: dict[str, str | int] = {"limit": limit}
+    for attempt in range(_MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(_DEEZER_GLOBAL_CHART_URL, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+            break
+        except httpx.HTTPError:
+            if attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(_BASE_DELAY * (2**attempt) + random.uniform(0, 0.2))
+                continue
+            raise
+
+    tracks: list[PlayableTrack] = []
+    for item in data.get("data", []):
+        preview = item.get("preview", "")
+        if not _has_valid_preview(preview):
+            continue
+        album = item.get("album", {})
+        tracks.append(
+            PlayableTrack(
+                name=item.get("title_short") or item["title"],
+                artist=item["artist"]["name"],
+                preview_url=preview,
+                duration_ms=item.get("duration", 0) * 1000,
+                deezer_id=item["id"],
+                image_url=album.get("cover_medium") or album.get("cover"),
+            )
+        )
+    logger.info("fetch_global_chart: %d playable tracks", len(tracks))
+    return tracks
 
 
 def _normalize_artist(name: str) -> str:

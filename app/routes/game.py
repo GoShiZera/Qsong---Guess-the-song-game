@@ -188,7 +188,16 @@ async def game_start(
         rounds_total=rounds_total,
     )
 
-    session_id = create_game_session(state)
+    set_game_cookie(response, create_game_session(state))
+
+    return {
+        "tracks": [{"name": t.name, "artist": t.artist} for t in pool],
+        "total": len(pool),
+        "rounds_total": rounds_total,
+    }
+
+
+def set_game_cookie(response: Response, session_id: str) -> None:
     response.set_cookie(
         key="game_session",
         value=session_id,
@@ -198,12 +207,6 @@ async def game_start(
         samesite="lax",
         path="/",
     )
-
-    return {
-        "tracks": [{"name": t.name, "artist": t.artist} for t in pool],
-        "total": len(pool),
-        "rounds_total": rounds_total,
-    }
 
 
 @router.post("/round/start")
@@ -215,16 +218,24 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
     if state.round_atual >= state.rounds_total:
         raise HTTPException(status_code=400, detail="Partida já finalizada")
 
-    played_tracks = {r.track.deezer_id for r in state.round_history}
-    available = [t for t in state.pool if t.deezer_id not in played_tracks and t.preview_url]
-    if not available:
-        raise HTTPException(status_code=400, detail="Nenhuma faixa com preview disponível")
+    if state.planned_rounds is not None:
+        # Daily challenge: fixed track and clip offset, same for every player.
+        planned = state.planned_rounds[state.round_atual]
+        track = next(t for t in state.pool if t.deezer_id == planned.deezer_id)
+        start_offset = planned.start_offset_ms
+    else:
+        played_tracks = {r.track.deezer_id for r in state.round_history}
+        available = [
+            t for t in state.pool if t.deezer_id not in played_tracks and t.preview_url
+        ]
+        if not available:
+            raise HTTPException(status_code=400, detail="Nenhuma faixa com preview disponível")
 
-    track = random.choice(available)
-    # Fix: use preview duration (max 30s = 30000ms) instead of full track duration
-    preview_duration = min(track.duration_ms, 30000)
-    max_offset = max(0, preview_duration - 2500)
-    start_offset = random.randint(0, max_offset)
+        track = random.choice(available)
+        # Fix: use preview duration (max 30s = 30000ms) instead of full track duration
+        preview_duration = min(track.duration_ms, 30000)
+        max_offset = max(0, preview_duration - 2500)
+        start_offset = random.randint(0, max_offset)
 
     state.current_track = track
     state.start_offset_ms = start_offset

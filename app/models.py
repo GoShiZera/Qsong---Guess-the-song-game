@@ -50,10 +50,20 @@ class RoundResult(BaseModel):
     completed_at: datetime
 
 
+class PlannedRound(BaseModel):
+    """A pre-decided round (daily challenge): which track and where the clip starts."""
+
+    deezer_id: int
+    start_offset_ms: int
+
+
 class GameState(BaseModel):
     playlist_id: str
     pool: list[PlayableTrack]
     rounds_total: int
+    # Daily challenge: fixed track order + clip offsets, identical for every
+    # player. None means a normal game (random track + random offset per round).
+    planned_rounds: list[PlannedRound] | None = None
     round_atual: int = 0
     current_track: PlayableTrack | None = None
     start_offset_ms: int = 0
