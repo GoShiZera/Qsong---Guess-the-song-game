@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import random
+import re
+from difflib import SequenceMatcher
 
 import httpx
 
@@ -94,8 +96,62 @@ def _artist_matches(expected: str, found: str) -> bool:
     return exp in fnd or fnd in exp
 
 
-def _select_best_match(expected_artist: str, candidates: list[DeezerTrack]) -> DeezerTrack | None:
-    valid = [c for c in candidates if _artist_matches(expected_artist, c.artist_name)]
+# Parenthetical/suffix noise commonly found on Deezer titles that doesn't
+# affect whether it's "the same song" (remaster tags, live/version notes).
+_TITLE_NOISE_RE = re.compile(
+    r"[\(\[][^)\]]*\b("
+    r"remaster(ed)?|live|ao vivo|version|edit|mix|deluxe|bonus|anniversary|mono|stereo"
+    r"|feat\.?|ft\.?|featuring"
+    r")\b[^)\]]*[\)\]]",
+    re.IGNORECASE,
+)
+_TITLE_TRAILING_TAG_RE = re.compile(
+    r"\s*-\s*(live|remaster(ed)?|remix|acoustic|ao vivo|version|mono|stereo).*$",
+    re.IGNORECASE,
+)
+_TITLE_FEAT_RE = re.compile(r"\s*(feat\.?|ft\.?|featuring)\s+.*$", re.IGNORECASE)
+
+
+def _normalize_title(title: str) -> str:
+    """Normalize a track title for fuzzy comparison, stripping noise like
+    '(Remastered 2011)', '- Live', 'feat. X', etc. that Deezer/Spotify
+    titles frequently disagree on despite being the same song."""
+    normalized = title.lower().strip()
+    normalized = _TITLE_NOISE_RE.sub(" ", normalized)
+    normalized = _TITLE_TRAILING_TAG_RE.sub("", normalized)
+    normalized = _TITLE_FEAT_RE.sub("", normalized)
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return normalized
+
+
+def _title_matches(expected: str, found: str, threshold: float = 0.6) -> bool:
+    """Check the candidate is plausibly the *same song*, not just the same
+    artist. Without this, matching by artist + Deezer rank alone can pick a
+    completely different (more popular) track by the same artist."""
+    exp = _normalize_title(expected)
+    fnd = _normalize_title(found)
+    if not exp or not fnd:
+        return False
+    if exp == fnd:
+        return True
+    shorter, longer = (exp, fnd) if len(exp) <= len(fnd) else (fnd, exp)
+    # A one-sided containment only counts as a match if the shorter title
+    # makes up a substantial share of the longer one — otherwise short/generic
+    # titles ("Song") would match almost anything ("A Totally Different Song").
+    if shorter in longer and len(shorter) / len(longer) >= 0.5:
+        return True
+    return SequenceMatcher(None, exp, fnd).ratio() >= threshold
+
+
+def _select_best_match(
+    expected_artist: str, expected_title: str, candidates: list[DeezerTrack]
+) -> DeezerTrack | None:
+    valid = [
+        c
+        for c in candidates
+        if _artist_matches(expected_artist, c.artist_name)
+        and _title_matches(expected_title, c.title)
+    ]
     if not valid:
         return None
     return max(valid, key=lambda t: t.rank)
@@ -200,23 +256,16 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                 st.name,
             )
 
-            best = _select_best_match(st.artist, deezer_results)
+            best = _select_best_match(st.artist, st.name, deezer_results)
             if best is None:
                 logger.debug(
-                    "Deezer search [%d/%d]: no artist match for '%s - %s' (found artists: %s)",
+                    "Deezer search [%d/%d]: no artist/title match for '%s - %s' "
+                    "(found: %s)",
                     i + 1,
                     len(tracks_without_preview),
                     st.artist,
                     st.name,
-                    [r.artist_name for r in deezer_results[:5]],
-                )
-                logger.debug(
-                    "Deezer search [%d/%d]: no artist match for '%s - %s' (found artists: %s)",
-                    i + 1,
-                    len(tracks_without_preview),
-                    st.artist,
-                    st.name,
-                    [r.artist_name for r in deezer_results[:5]],
+                    [f"{r.artist_name} - {r.title}" for r in deezer_results[:5]],
                 )
                 deezer_no_artist_match += 1
                 continue

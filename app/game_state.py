@@ -69,11 +69,3 @@ def delete_game_session(session_id: str) -> bool:
         del _session_store[session_id]
         return True
     return False
-
-
-def serialize_session_data(data: dict[str, Any]) -> str:
-    return serialize_session(data)
-
-
-def deserialize_session_data(cookie: str) -> dict[str, Any] | None:
-    return deserialize_session(cookie)

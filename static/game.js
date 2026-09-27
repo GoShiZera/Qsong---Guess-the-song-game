@@ -14,7 +14,6 @@
     // ---------- State ----------
     const state = {
         view: 'setup',
-        sessionCookie: null,
         pool: [],
         currentTrack: null,
         startOffset: 0,
@@ -66,7 +65,6 @@
         playlistsLoading: document.getElementById('playlists-loading'),
         playlistsError: document.getElementById('playlists-error'),
         playlistsList: document.getElementById('playlists-list'),
-        roundsInputSelect: document.getElementById('rounds-input-select'),
         selectUrlForm: document.getElementById('select-url-form'),
         selectPlaylistInput: document.getElementById('select-playlist-input'),
         btnStartSelectUrl: document.getElementById('btn-start-select-url'),
@@ -124,6 +122,18 @@
     // ---------- Utility Functions ----------
     const $ = (sel, ctx = document) => ctx.querySelector(sel);
     const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
+
+    // Escapes untrusted text (track names, artists, playlist names, user
+    // guesses) before it is interpolated into innerHTML. Playlist/track
+    // metadata comes from third parties via the Spotify/Deezer APIs and
+    // must never be treated as safe markup.
+    const escapeHtml = (value) => {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        // textContent->innerHTML escapes &, < and > but not quotes; escape
+        // those too so the value is also safe inside a quoted HTML attribute.
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    };
 
     const formatTime = (ms) => {
         if (ms < 1000) {
@@ -217,33 +227,15 @@
         return state.audioCtx.decodeAudioData(arrayBuffer);
     };
 
-    const playClip = async (previewUrl, startTimeMs, durationMs) => {
-        if (!previewUrl) {
-            console.warn('No preview URL provided');
-            return;
-        }
-        
-        // Store current clip duration for replay
-        state.currentClipDuration = durationMs;
-        
-        initAudioContext();
-        stopAudio();
-
-        try {
-            state.audioBuffer = await fetchAndDecodeAudio(previewUrl);
-        } catch (e) {
-            console.error('Audio decode error:', e);
-            // Re-enable controls so user can skip or guess
-            setGameControlsEnabled(true);
-            return;
-        }
-
-        const startTime = startTimeMs / 1000;
-        const duration = durationMs / 1000;
+    // Starts a new BufferSourceNode against the currently decoded
+    // state.audioBuffer, clamped to its actual length, and wires up all the
+    // playback bookkeeping (progress loop, play/pause UI, onended). Shared
+    // by playClip/replayClip/resumeAudio/playFullPreview, which only differ
+    // in which offset/duration they start from.
+    const _playFromBuffer = (offsetSec, durationSec) => {
         const bufferDuration = state.audioBuffer.duration;
-
-        const actualStart = Math.min(startTime, bufferDuration - 0.05);
-        const actualDuration = Math.min(duration, bufferDuration - actualStart);
+        const actualStart = Math.min(offsetSec, bufferDuration - 0.05);
+        const actualDuration = Math.min(durationSec, bufferDuration - actualStart);
 
         state.sourceNode = state.audioCtx.createBufferSource();
         state.sourceNode.buffer = state.audioBuffer;
@@ -260,6 +252,30 @@
         startProgressLoop(actualDuration * 1000);
 
         state.sourceNode.onended = () => onAudioEnded();
+    };
+
+    const playClip = async (previewUrl, startTimeMs, durationMs) => {
+        if (!previewUrl) {
+            console.warn('No preview URL provided');
+            return;
+        }
+
+        // Store current clip duration for replay
+        state.currentClipDuration = durationMs;
+
+        initAudioContext();
+        stopAudio();
+
+        try {
+            state.audioBuffer = await fetchAndDecodeAudio(previewUrl);
+        } catch (e) {
+            console.error('Audio decode error:', e);
+            // Re-enable controls so user can skip or guess
+            setGameControlsEnabled(true);
+            return;
+        }
+
+        _playFromBuffer(startTimeMs / 1000, durationMs / 1000);
     };
 
     const stopAudio = () => {
@@ -304,29 +320,7 @@
         if (!state.audioBuffer || !state.currentTrack) return;
         initAudioContext();
         stopAudio();
-
-        const startTime = state.startOffset / 1000;
-        const duration = state.currentClipDuration / 1000;
-        const bufferDuration = state.audioBuffer.duration;
-
-        const actualStart = Math.min(startTime, bufferDuration - 0.05);
-        const actualDuration = Math.min(duration, bufferDuration - actualStart);
-
-        state.sourceNode = state.audioCtx.createBufferSource();
-        state.sourceNode.buffer = state.audioBuffer;
-        state.sourceNode.connect(state.gainNode);
-
-        state.sourceNode.start(0, actualStart, actualDuration);
-
-        state.isPlaying = true;
-        state.playStartTime = state.audioCtx.currentTime;
-        state.scheduledStopTime = state.playStartTime + actualDuration;
-
-        updateWaveform(true);
-        updatePlayPauseButton(true);
-        startProgressLoop(actualDuration * 1000);
-
-        state.sourceNode.onended = () => onAudioEnded();
+        _playFromBuffer(state.startOffset / 1000, state.currentClipDuration / 1000);
     };
 
     const resumeAudio = () => {
@@ -335,23 +329,7 @@
 
         const elapsed = state.audioCtx.currentTime - state.playStartTime;
         const remaining = Math.max(0, state.scheduledStopTime - state.audioCtx.currentTime);
-
-        state.sourceNode = state.audioCtx.createBufferSource();
-        state.sourceNode.buffer = state.audioBuffer;
-        state.sourceNode.connect(state.gainNode);
-
-        const startOffset = state.startOffset / 1000 + elapsed;
-        state.sourceNode.start(0, startOffset, remaining);
-
-        state.isPlaying = true;
-        state.playStartTime = state.audioCtx.currentTime;
-        state.scheduledStopTime = state.audioCtx.currentTime + remaining;
-
-        updateWaveform(true);
-        updatePlayPauseButton(true);
-        startProgressLoop(remaining * 1000);
-
-        state.sourceNode.onended = () => onAudioEnded();
+        _playFromBuffer(state.startOffset / 1000 + elapsed, remaining);
     };
 
     const onAudioEnded = () => {
@@ -425,11 +403,11 @@
             console.warn('No preview URL provided');
             return;
         }
-        
+
         // Limit preview duration to 30 seconds (30000ms)
         const limitedDurationMs = Math.min(durationMs, 30000);
         state.currentClipDuration = limitedDurationMs;
-        
+
         initAudioContext();
         stopAudio();
 
@@ -440,24 +418,7 @@
             return;
         }
 
-        const bufferDuration = state.audioBuffer.duration;
-        const actualDuration = Math.min(limitedDurationMs / 1000, bufferDuration);
-
-        state.sourceNode = state.audioCtx.createBufferSource();
-        state.sourceNode.buffer = state.audioBuffer;
-        state.sourceNode.connect(state.gainNode);
-
-        state.sourceNode.start(0, 0, actualDuration);
-
-        state.isPlaying = true;
-        state.playStartTime = state.audioCtx.currentTime;
-        state.scheduledStopTime = state.playStartTime + actualDuration;
-
-        updateWaveform(true);
-        updatePlayPauseButton(true);
-        startProgressLoop(actualDuration * 1000);
-
-        state.sourceNode.onended = () => onAudioEnded();
+        _playFromBuffer(0, limitedDurationMs / 1000);
     };
 
     // ---------- API Calls ----------
@@ -605,8 +566,8 @@
         const li = document.createElement('li');
         li.className = `guess-log-item ${itemClass}`;
         li.innerHTML = `
-            <span class="guess-log-num">${attemptNumber}</span>
-            <span class="guess-log-text">${displayText}</span>
+            <span class="guess-log-num">${escapeHtml(attemptNumber)}</span>
+            <span class="guess-log-text">${escapeHtml(displayText)}</span>
             <span class="guess-log-icon">${iconSvg}</span>
         `;
         els.guessLogList.appendChild(li);
@@ -777,13 +738,13 @@
                     <span class="round-outcome">${round.correct ? 'Acertou' : 'Errou'}</span>
                 </div>
                 <div class="round-track">
-                    <span class="round-track-name">${round.track?.name || 'Música'}</span>
-                    <span class="round-track-artist">${round.track?.artist || ''}</span>
+                    <span class="round-track-name">${escapeHtml(round.track?.name || 'Música')}</span>
+                    <span class="round-track-artist">${escapeHtml(round.track?.artist || '')}</span>
                 </div>
                 <div class="round-guesses">
                     ${(round.guesses || []).map(g => `
                         <span class="guess-tag ${g.correct ? 'correct' : ''}">
-                            ${g.attempt}. ${g.guess}
+                            ${escapeHtml(g.attempt)}. ${escapeHtml(g.guess)}
                         </span>
                     `).join('')}
                 </div>
@@ -806,10 +767,10 @@
             const imgUrl = pl.images?.[0]?.url || '';
             const trackCount = pl.tracks_total || 0;
             li.innerHTML = `
-                ${imgUrl ? `<img src="${imgUrl}" alt="" loading="lazy">` : '<div class="playlist-placeholder" style="width:56px;height:56px;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:20px;">🎵</div>'}
+                ${imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="" loading="lazy">` : '<div class="playlist-placeholder" style="width:56px;height:56px;border-radius:8px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:20px;">🎵</div>'}
                 <div class="playlist-info">
-                    <span class="playlist-name">${pl.name}</span>
-                    <span class="playlist-meta">${trackCount} faixas ${pl.public ? '• Pública' : '• Privada'}</span>
+                    <span class="playlist-name">${escapeHtml(pl.name)}</span>
+                    <span class="playlist-meta">${escapeHtml(trackCount)} faixas ${pl.public ? '• Pública' : '• Privada'}</span>
                 </div>
                 <svg class="playlist-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
             `;
@@ -838,6 +799,40 @@
     };
 
     // ---------- Game Flow ----------
+    // Maps a failed api.startGame() error into the Portuguese message shown
+    // to the user. Shared by startNewGame/startGameFromPlaylist, which only
+    // differ in which error element/loading UI they toggle.
+    const _mapStartGameError = (err) => {
+        const msg = err.message || 'Erro desconhecido';
+        if (err.status === 502 || err.status === 500 || msg.includes('Erro de conexão com Spotify')) {
+            return 'Erro de conexão com Spotify. Verifique sua internet e tente novamente.';
+        }
+        if (msg.includes('Nenhuma faixa') || msg.includes('Nenhuma faixa válida')) {
+            return 'Nenhuma faixa disponível nesta playlist. Tente outra playlist.';
+        }
+        if (msg.includes('Não autenticado') || err.status === 401) {
+            return 'Sessão expirada. Faça login novamente.';
+        }
+        return msg;
+    };
+
+    // Applies a successful api.startGame() response: resets round/score
+    // state, fills the autocomplete datalist and moves to the game view.
+    const _applyGameStartResult = async (data) => {
+        state.pool = data.tracks.map(t => ({ name: t.name, artist: t.artist }));
+        state.totalRounds = data.rounds_total;
+        state.roundNumber = 1;
+        state.correctCount = 0;
+        state.wrongCount = 0;
+        state.roundHistory = [];
+
+        populateDatalist(data.tracks);
+        createAttemptBoxes();
+        updateScoreDisplay();
+        showView('game');
+        await startNextRound();
+    };
+
     const startNewGame = async (playlistId, rounds) => {
         hideError(els.setupError);
         els.setupForm.hidden = true;
@@ -859,35 +854,15 @@
             }
 
             const data = await api.startGame(playlistId, rounds);
-            
+
             updateProgress(100, 'Pronto!');
             await new Promise(r => setTimeout(r, 300));
 
-            state.pool = data.tracks.map(t => ({ name: t.name, artist: t.artist }));
-            state.totalRounds = data.rounds_total;
-            state.roundNumber = 1;
-            state.correctCount = 0;
-            state.wrongCount = 0;
-            state.roundHistory = [];
-
-            populateDatalist(data.tracks);
-            createAttemptBoxes();
-            updateScoreDisplay();
-            showView('game');
-            await startNextRound();
+            await _applyGameStartResult(data);
 
         } catch (err) {
             console.error('Start game error:', err);
-            const msg = err.message || 'Erro desconhecido';
-            if (err.status === 502 || err.status === 500 || msg.includes('Erro de conexão com Spotify')) {
-                showError(els.setupError, 'Erro de conexão com Spotify. Verifique sua internet e tente novamente.');
-            } else if (msg.includes('Nenhuma faixa') || msg.includes('Nenhuma faixa válida')) {
-                showError(els.setupError, 'Nenhuma faixa disponível nesta playlist. Tente outra playlist.');
-            } else if (msg.includes('Não autenticado') || err.status === 401) {
-                showError(els.setupError, 'Sessão expirada. Faça login novamente.');
-            } else {
-                showError(els.setupError, msg);
-            }
+            showError(els.setupError, _mapStartGameError(err));
             els.setupForm.hidden = false;
         } finally {
             els.setupProgress.hidden = true;
@@ -905,30 +880,10 @@
             updateProgress(100, 'Pronto!');
             await new Promise(r => setTimeout(r, 300));
 
-            state.pool = data.tracks.map(t => ({ name: t.name, artist: t.artist }));
-            state.totalRounds = data.rounds_total;
-            state.roundNumber = 1;
-            state.correctCount = 0;
-            state.wrongCount = 0;
-            state.roundHistory = [];
-
-            populateDatalist(data.tracks);
-            createAttemptBoxes();
-            updateScoreDisplay();
-            showView('game');
-            await startNextRound();
+            await _applyGameStartResult(data);
         } catch (err) {
             console.error('Start game error:', err);
-            const msg = err.message || 'Erro desconhecido';
-            if (err.status === 502 || err.status === 500 || msg.includes('Erro de conexão com Spotify')) {
-                showError(els.playlistsError, 'Erro de conexão com Spotify. Verifique sua internet e tente novamente.');
-            } else if (msg.includes('Nenhuma faixa') || msg.includes('Nenhuma faixa válida')) {
-                showError(els.playlistsError, 'Nenhuma faixa disponível nesta playlist. Tente outra playlist.');
-            } else if (msg.includes('Não autenticado') || err.status === 401) {
-                showError(els.playlistsError, 'Sessão expirada. Faça login novamente.');
-            } else {
-                showError(els.playlistsError, msg);
-            }
+            showError(els.playlistsError, _mapStartGameError(err));
             els.playlistsList.hidden = false;
         } finally {
             els.playlistsLoading.hidden = true;
@@ -1214,13 +1169,6 @@
         // Logout
         els.btnLogout?.addEventListener('click', handleLogout);
 
-        // Select playlist form
-        if (els.roundsInputSelect) {
-            els.roundsInputSelect.addEventListener('input', () => {
-                // validation if needed
-            });
-        }
-
         // URL form (para usuários logados jogarem com link direto)
         els.selectUrlForm?.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -1260,13 +1208,6 @@
             } else {
                 startNextRound();
             }
-        });
-
-        // Progress bar click to seek
-        els.progressBarPlayer?.addEventListener('click', (e) => {
-            if (!state.isPlaying || !state.audioBuffer) return;
-            const rect = els.progressBarPlayer.getBoundingClientRect();
-            const percent = (e.clientX - rect.left) / rect.width;
         });
 
         // New game button

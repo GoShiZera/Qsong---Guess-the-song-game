@@ -12,6 +12,7 @@ from app.config import settings
 from app.game_state import (
     create_game_session,
     get_game_session,
+    serialize_session,
     update_game_session,
 )
 from app.models import GameState, GuessRecord, RoundResult
@@ -31,6 +32,37 @@ logger = logging.getLogger(__name__)
 PLAYLIST_ID_REGEX = re.compile(r"playlist/([a-zA-Z0-9]{22})")
 ALBUM_ID_REGEX = re.compile(r"album/([a-zA-Z0-9]{22})")
 CLIP_DURATIONS = [400, 800, 1600, 2000, 2500]
+
+
+def _persist_refreshed_tokens(
+    response: Response,
+    session: dict[str, Any],
+    token_update: dict[str, str],
+) -> None:
+    """If a Spotify access token was refreshed mid-request, write the new
+    token pair back into the auth_session cookie. Without this, a refreshed
+    token is used for the current request only and then discarded — the next
+    request refreshes again from the (still valid) old refresh_token, but if
+    Spotify ever rotates the refresh_token itself, the rotated value is lost
+    and the user gets silently logged out.
+    """
+    if not token_update:
+        return
+    user_tokens = dict(session.get("user_tokens") or {})
+    user_tokens["access_token"] = token_update["access_token"]
+    user_tokens["refresh_token"] = (
+        token_update.get("refresh_token") or user_tokens.get("refresh_token")
+    )
+    session_data = {**session, "user_tokens": user_tokens, "authenticated": True}
+    response.set_cookie(
+        key="auth_session",
+        value=serialize_session(session_data),
+        max_age=60 * 60 * 24 * 7,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
 
 
 def extract_spotify_id(input_str: str) -> tuple[str, str] | None:
@@ -85,11 +117,16 @@ async def game_start(
     if resource_type == "playlist" and spotify_id == "me:liked" and not access_token:
         raise HTTPException(status_code=401, detail="Não autenticado para acessar Músicas Curtidas")
 
+    token_update: dict[str, str] = {}
     try:
         if resource_type == "album":
-            spotify_tracks = await fetch_album_tracks(spotify_id, access_token, refresh_token)
+            spotify_tracks = await fetch_album_tracks(
+                spotify_id, access_token, refresh_token, token_update
+            )
         else:
-            spotify_tracks = await fetch_playlist_tracks(spotify_id, access_token, refresh_token)
+            spotify_tracks = await fetch_playlist_tracks(
+                spotify_id, access_token, refresh_token, token_update
+            )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
     except SpotifyAPIError as e:
@@ -127,6 +164,8 @@ async def game_start(
             exc_info=True,
         )
         raise HTTPException(status_code=500, detail="Erro interno do servidor") from None
+
+    _persist_refreshed_tokens(response, session, token_update)
 
     if not spotify_tracks:
         raise HTTPException(status_code=404, detail="Nenhuma faixa válida encontrada na playlist")
@@ -204,33 +243,28 @@ async def round_start(request: Request, response: Response) -> dict[str, Any]:
     }
 
 
-@router.post("/round/guess")
-async def round_guess(
-    request: Request,
-    response: Response,
-    guess: str = Body(..., embed=True),
-) -> dict[str, Any]:
-    state = await _get_game_state(request)
-    if state is None or state.current_track is None:
-        raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
+def _record_attempt(
+    state: GameState, guess_text: str, correct: bool
+) -> tuple[bool, int, bool, dict[str, Any] | None]:
+    """Record one guess/skip attempt against the current round and advance
+    the round/game state accordingly. Shared by /round/guess and
+    /round/skip, which only differ in whether the attempt was correct and
+    what raw guess text (if any) gets stored in the history.
 
-    correct = _normalize(guess) == _normalize(state.current_track.name)
-    normalized_guess = _normalize(guess)
-    expected_name = _normalize(state.current_track.name)
-    expected_full = _normalize(f"{state.current_track.name} - {state.current_track.artist}")
-    correct = normalized_guess == expected_name or normalized_guess == expected_full
+    Returns (round_over, attempt_number, game_over, revealed_track_dump).
+    """
+    assert state.current_track is not None
     clip_duration = CLIP_DURATIONS[state.attempt]
-
     state.guess_history.append(
         GuessRecord(
             attempt=state.attempt + 1,
-            guess=guess,
+            guess=guess_text,
             correct=correct,
             clip_duration_ms=clip_duration,
         )
     )
 
-    # Determine if round is over
+    # A round ends on a correct guess or once every fixed attempt has been used.
     round_over = correct or state.attempt >= 4
     attempt_number = state.attempt + 1
 
@@ -261,6 +295,25 @@ async def round_guess(
         revealed = None
 
     state.updated_at = datetime.now(UTC)
+    return round_over, attempt_number, game_over, revealed
+
+
+@router.post("/round/guess")
+async def round_guess(
+    request: Request,
+    response: Response,
+    guess: str = Body(..., embed=True),
+) -> dict[str, Any]:
+    state = await _get_game_state(request)
+    if state is None or state.current_track is None:
+        raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
+
+    normalized_guess = _normalize(guess)
+    expected_name = _normalize(state.current_track.name)
+    expected_full = _normalize(f"{state.current_track.name} - {state.current_track.artist}")
+    correct = normalized_guess == expected_name or normalized_guess == expected_full
+
+    round_over, attempt_number, game_over, revealed = _record_attempt(state, guess, correct)
 
     session_id = request.cookies.get("game_session")
     assert session_id is not None
@@ -272,7 +325,7 @@ async def round_guess(
         "round_over": round_over,
         "game_over": game_over,
     }
-    if not round_over and not correct:
+    if not round_over:
         result["next_clip_duration_ms"] = CLIP_DURATIONS[state.attempt]
     if revealed:
         result["revealed_track"] = revealed
@@ -286,49 +339,8 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
     if state is None or state.current_track is None:
         raise HTTPException(status_code=400, detail="Sessão inválida ou nenhum round ativo")
 
-    # Skip just advances the attempt without checking correctness
-    clip_duration = CLIP_DURATIONS[state.attempt]
-    state.guess_history.append(
-        GuessRecord(
-            attempt=state.attempt + 1,
-            guess="",
-            correct=False,
-            clip_duration_ms=clip_duration,
-        )
-    )
-
-    # Determine if round is over
-    round_over = state.attempt >= 4
-    attempt_number = state.attempt + 1
-
-    if round_over:
-        # Round ends after 7 attempts (0-indexed, so attempt 6 is the 7th)
-        state.round_history.append(
-            RoundResult(
-                track=state.current_track,
-                guesses=state.guess_history.copy(),
-                correct=False,
-                completed_at=datetime.now(UTC),
-            )
-        )
-        revealed_track = state.current_track
-        state.round_atual += 1
-        state.current_track = None
-        state.attempt = 0
-        state.guess_history = []
-        # Check if game is over: either all rounds played or no more tracks available
-        played_ids = {r.track.deezer_id for r in state.round_history}
-        remaining = [t for t in state.pool if t.deezer_id not in played_ids and t.preview_url]
-        game_over = state.round_atual >= state.rounds_total or len(remaining) == 0
-        revealed: dict[str, Any] | None = (
-            revealed_track.model_dump() if revealed_track else None
-        )
-    else:
-        state.attempt += 1
-        game_over = False
-        revealed = None
-
-    state.updated_at = datetime.now(UTC)
+    # Skip just advances the attempt without ever being "correct".
+    round_over, attempt_number, game_over, revealed = _record_attempt(state, "", False)
 
     session_id = request.cookies.get("game_session")
     assert session_id is not None
@@ -340,7 +352,7 @@ async def round_skip(request: Request, response: Response) -> dict[str, Any]:
         "round_over": round_over,
         "game_over": game_over,
     }
-    if not round_over and not game_over:
+    if not round_over:
         result["next_clip_duration_ms"] = CLIP_DURATIONS[state.attempt]
     if revealed:
         result["revealed_track"] = revealed
@@ -372,7 +384,7 @@ async def _get_game_state(request: Request) -> GameState | None:
 
 
 @router.get("/user/profile")
-async def get_user_profile_route(request: Request) -> dict[str, Any]:
+async def get_user_profile_route(request: Request, response: Response) -> dict[str, Any]:
     session = getattr(request.state, "session", {})
     user_tokens = session.get("user_tokens")
     if not user_tokens:
@@ -381,8 +393,10 @@ async def get_user_profile_route(request: Request) -> dict[str, Any]:
     access_token = user_tokens.get("access_token")
     refresh_token = user_tokens.get("refresh_token")
 
+    token_update: dict[str, str] = {}
     try:
-        profile = await fetch_user_profile(access_token, refresh_token)
+        profile = await fetch_user_profile(access_token, refresh_token, token_update)
+        _persist_refreshed_tokens(response, session, token_update)
         return profile
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e)) from None
@@ -395,7 +409,7 @@ async def get_user_profile_route(request: Request) -> dict[str, Any]:
 
 
 @router.get("/user/playlists")
-async def get_user_playlists(request: Request) -> list[dict[str, Any]]:
+async def get_user_playlists(request: Request, response: Response) -> list[dict[str, Any]]:
     session = getattr(request.state, "session", {})
     user_tokens = session.get("user_tokens")
     if not user_tokens:
@@ -404,8 +418,10 @@ async def get_user_playlists(request: Request) -> list[dict[str, Any]]:
     access_token = user_tokens.get("access_token")
     refresh_token = user_tokens.get("refresh_token")
 
+    token_update: dict[str, str] = {}
     try:
-        playlists = await fetch_user_playlists(access_token, refresh_token)
+        playlists = await fetch_user_playlists(access_token, refresh_token, token_update)
+        _persist_refreshed_tokens(response, session, token_update)
         # Ensure all playlists have tracks_total field
         for pl in playlists:
             if "tracks_total" not in pl or pl["tracks_total"] is None:

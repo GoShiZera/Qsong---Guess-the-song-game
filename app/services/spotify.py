@@ -138,13 +138,24 @@ async def _call_spotify_with_user_token(
 
 
 async def fetch_user_profile(
-    access_token: str, refresh_token: str | None = None
+    access_token: str,
+    refresh_token: str | None = None,
+    token_update: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Fetch authenticated user's profile info (name, avatar)."""
+    """Fetch authenticated user's profile info (name, avatar).
+
+    If the access token had to be refreshed mid-call, the new token pair is
+    written into `token_update` so the caller can persist it (otherwise the
+    refreshed token is silently discarded and the user is logged out once
+    the original access token expires again).
+    """
     url = "https://api.spotify.com/v1/me"
     resp, new_access, new_refresh = await _call_spotify_with_user_token(
         access_token, refresh_token, "GET", url
     )
+    if new_access and token_update is not None:
+        token_update["access_token"] = new_access
+        token_update["refresh_token"] = new_refresh or refresh_token or ""
     if resp.status_code == 401:
         raise ValueError("Token expirado ou inválido")
     resp.raise_for_status()
@@ -159,9 +170,14 @@ async def fetch_user_profile(
 
 
 async def fetch_user_playlists(
-    access_token: str, refresh_token: str | None = None
+    access_token: str,
+    refresh_token: str | None = None,
+    token_update: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Fetch user's playlists."""
+    """Fetch user's playlists.
+
+    See `fetch_user_profile` for the `token_update` contract.
+    """
     items = []
     url = "https://api.spotify.com/v1/me/playlists?limit=50"
     current_access = access_token
@@ -213,6 +229,9 @@ async def fetch_user_playlists(
                 })
     except Exception:
         pass
+    if token_update is not None and current_access != access_token:
+        token_update["access_token"] = current_access
+        token_update["refresh_token"] = current_refresh or ""
     return items
 
 
@@ -227,8 +246,12 @@ async def _fetch_spotify_items(
     url: str,
     token: str,
     use_refresh: str | None = None,
+    token_update: dict[str, str] | None = None,
 ) -> list[SpotifyTrack]:
-    """Generic function to fetch tracks from a paginated Spotify endpoint."""
+    """Generic function to fetch tracks from a paginated Spotify endpoint.
+
+    See `fetch_user_profile` for the `token_update` contract.
+    """
     tracks: list[SpotifyTrack] = []
 
     async with httpx.AsyncClient() as client:
@@ -242,6 +265,9 @@ async def _fetch_spotify_items(
                     token_data = await refresh_user_token(use_refresh)
                     token = token_data["access_token"]
                     use_refresh = token_data.get("refresh_token", use_refresh)
+                    if token_update is not None:
+                        token_update["access_token"] = token
+                        token_update["refresh_token"] = use_refresh or ""
                     headers["Authorization"] = f"Bearer {token}"
                     resp = await client.get(url, headers=headers, timeout=10.0)
                 except Exception as e:
@@ -347,8 +373,12 @@ async def fetch_playlist_tracks(
     playlist_id: str,
     access_token: str | None = None,
     refresh_token: str | None = None,
+    token_update: dict[str, str] | None = None,
 ) -> list[SpotifyTrack]:
-    """Fetch tracks from a playlist. Uses user token if provided, else app token."""
+    """Fetch tracks from a playlist. Uses user token if provided, else app token.
+
+    See `fetch_user_profile` for the `token_update` contract.
+    """
     # Handle special "Liked Songs" playlist
     if playlist_id == "me:liked":
         if not access_token:
@@ -356,7 +386,7 @@ async def fetch_playlist_tracks(
         token = access_token
         use_refresh = refresh_token
         url = "https://api.spotify.com/v1/me/tracks?limit=50"
-        return await _fetch_spotify_items(url, token, use_refresh)
+        return await _fetch_spotify_items(url, token, use_refresh, token_update)
 
     if access_token:
         token = access_token
@@ -368,15 +398,19 @@ async def fetch_playlist_tracks(
     # FIXED: Spotify deprecated /playlists/{id}/tracks on Feb 11, 2026
     # Use /playlists/{id}/items instead (same response structure with nested "track")
     url = f"https://api.spotify.com/v1/playlists/{playlist_id}/items?limit=100"
-    return await _fetch_spotify_items(url, token, use_refresh)
+    return await _fetch_spotify_items(url, token, use_refresh, token_update)
 
 
 async def fetch_album_tracks(
     album_id: str,
     access_token: str | None = None,
     refresh_token: str | None = None,
+    token_update: dict[str, str] | None = None,
 ) -> list[SpotifyTrack]:
-    """Fetch tracks from an album. Uses user token if provided, else app token."""
+    """Fetch tracks from an album. Uses user token if provided, else app token.
+
+    See `fetch_user_profile` for the `token_update` contract.
+    """
     if access_token:
         token = access_token
         use_refresh = refresh_token
@@ -388,4 +422,4 @@ async def fetch_album_tracks(
     # Use /albums/{id}/tracks still works as of now, but /items is the new standard
     # Keeping /tracks for albums as it's a different endpoint that may not be deprecated
     url = f"https://api.spotify.com/v1/albums/{album_id}/tracks?limit=50"
-    return await _fetch_spotify_items(url, token, use_refresh)
+    return await _fetch_spotify_items(url, token, use_refresh, token_update)

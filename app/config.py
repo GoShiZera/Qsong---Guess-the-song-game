@@ -13,6 +13,10 @@ class Settings:
         self.session_secret = os.getenv("SESSION_SECRET", "")
         # Production default: secure cookies
         self.cookie_secure = os.getenv("COOKIE_SECURE", "true").lower() == "true"
+        # Level for the app's own diagnostic loggers (deezer/spotify/game
+        # matching, request tracing). Default INFO to avoid noisy DEBUG logs
+        # in production; set to DEBUG locally when investigating an issue.
+        self.log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 
 
 settings = Settings()

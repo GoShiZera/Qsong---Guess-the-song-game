@@ -241,10 +241,10 @@ Qsong/
 | **Tentativas por música** | 5 fixas |
 | **Duração dos trechos (ms)** | `[400, 800, 1600, 2000, 2500]` |
 | **Offset de início** | Sorteado 1x por música ∈ `[0, min(duration_ms, 30000) - 2500]` |
-| **Matching Deezer** | `artist:"{artista}" track:"{nome}"` → filtro fuzzy artist → maior `rank` |
+| **Matching Deezer** | Busca por texto livre `"{artista} {nome}"` → filtro fuzzy de artista e de título → maior `rank` entre os que sobrarem |
 | **Descartes silenciosos** | Faixas sem match válido na Deezer não entram no pool |
 | **Autocomplete** | `<datalist>` nativo — 100% client-side |
-| **Sessão de jogo** | Cookie `game_session` assinado (7 dias) + estado serializado JSON — sobrevive a cold start |
+| **Sessão de jogo** | Cookie `game_session` assinado (7 dias) guarda apenas o ID da sessão; o `GameState` em si fica em memória no processo — **não sobrevive** a um restart/cold start do servidor |
 | **Sessão de auth** | Cookie `auth_session` assinado (7 dias) com tokens do usuário |
 | **Anti-trapaça** | Resposta comparada só no backend; preview_url só enviado ao client no round |
 | **HTTPS/Cookies** | `COOKIE_SECURE=true` (padrão/produção) → HTTPSRedirect + cookies Secure; `false` (local) → HTTP OK |
@@ -258,7 +258,7 @@ Qsong/
 | **Dono do app sem Premium (Spotify)** | App para de funcionar (403 "Active premium subscription required") | Fallback Exportify (CSV upload) — ativar só se expirar |
 | **Rate limit Spotify** | Falha ao buscar playlist | Cache token app 55min + retry com backoff; auto-refresh user token |
 | **Rate limit Deezer (paralelo)** | Matching falha/parcial | Semáforo 10 req simultâneas + retry exponencial (3x) |
-| **Cold start Render (15min)** | Perde partida em andamento | Cookie serializa GameState completo |
+| **Cold start Render (15min)** | Perde partida em andamento | Nenhuma hoje — o `GameState` fica só em memória. Mitigação futura: serializar o estado no próprio cookie ou usar um KV externo |
 | **CSP bloqueia fetch Deezer** | Áudio não toca | Documentar `connect-src *.dzcdn.net` |
 | **Redirect URI mismatch** | OAuth falha | Configurar URIs corretas no Spotify Dashboard (prod + local) |
 
