@@ -639,6 +639,17 @@
         });
     };
 
+    const removeTrackFromDatalist = (guessText) => {
+        if (!guessText || !els.tracksDatalist) return;
+        const normalizedGuess = guessText.trim().toLowerCase();
+        const options = els.tracksDatalist.querySelectorAll('option');
+        options.forEach(option => {
+            if (option.value.trim().toLowerCase() === normalizedGuess) {
+                option.remove();
+            }
+        });
+    };
+
     const updateScoreDisplay = () => {
         els.scoreCorrect.querySelector('strong').textContent = state.correctCount;
         els.scoreTotal.querySelector('strong').textContent = state.roundNumber;
@@ -954,6 +965,9 @@
             els.waveform.hidden = false;
         }
 
+        // Restore full datalist at start of each round
+        populateDatalist(state.pool);
+
         try {
             const data = await api.startRound();
             if (!data.preview_url) {
@@ -1020,6 +1034,9 @@
                 state.roundNumber++;
                 showRoundResult(data, trackName);
             } else {
+                // Remove incorrect guess from datalist so player sees only remaining options
+                removeTrackFromDatalist(guessText);
+                
                 setTimeout(async () => {
                     setGameControlsEnabled(true);
                     els.guessInput.value = '';
