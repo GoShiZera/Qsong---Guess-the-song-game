@@ -990,12 +990,12 @@ input::placeholder {
     transition: background var(--transition-fast), transform var(--transition-fast);
 }
 
-.btn-spotify:hover {
+.btn-spotify:not(:disabled):hover {
     background: #1ed760;
     transform: scale(1.02);
 }
 
-.btn-spotify:active {
+.btn-spotify:not(:disabled):active {
     transform: scale(0.98);
 }
 
@@ -1004,40 +1004,36 @@ input::placeholder {
     outline-offset: 2px;
 }
 
-/* Secondary pill paired with .btn-spotify: same footprint, outlined instead
-   of filled, so the green stays reserved for the primary action. */
-.btn-daily {
-    display: flex;
-    width: 100%;
+/* Home: the two game modes stacked as equal pills, with the error slot
+   right below them so a failed daily start is read in context. */
+.home-options {
+    padding-top: 24px;
+}
+
+#home-error {
     max-width: 320px;
-    padding: 15px 24px;
-    background: transparent;
-    color: var(--text-primary);
-    border: 1px solid var(--text-muted);
-    font-size: 1rem;
-    font-weight: 700;
-    transition: border-color var(--transition-fast), background var(--transition-fast),
-        transform var(--transition-fast);
+    margin: 0 auto;
 }
 
-.btn-daily:not(:disabled):hover {
-    border-color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.06);
-    transform: scale(1.02);
+/* "← Voltar" on routed screens: pinned to the header's top-left, with the
+   header padded on both sides so centered titles never run under it. */
+.view-header:has(.view-back) {
+    position: relative;
+    padding-inline: 48px;
 }
 
-.btn-daily:not(:disabled):active {
-    transform: scale(0.98);
+.view-back {
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
-.btn-daily:focus-visible {
-    outline: 2px solid var(--accent-green);
-    outline-offset: 2px;
-}
-
-/* On the playlist screen it sits alone between the profile and the URL form. */
-#view-select-playlist .btn-daily {
-    margin: 0 auto 20px;
+/* The mode explanation is a sentence, not a tagline: readable measure. */
+.mode-explainer {
+    max-width: 44ch;
+    margin-inline: auto;
+    margin-top: 8px;
+    line-height: 1.5;
 }
 
 /* Rules flank the text and shrink to fit it, so longer labels
@@ -1223,9 +1219,15 @@ input::placeholder {
 
 /* Responsive adjustments for setup options */
 @media (max-width: 480px) {
-    .btn-spotify,
-    .btn-daily {
+    .btn-spotify {
         max-width: none;
+    }
+
+    /* Narrow screens: the explainer would be squeezed between the paddings;
+       give it the full width and let the back button sit above the title. */
+    .view-header:has(.view-back) {
+        padding-inline: 0;
+        padding-top: 44px;
     }
 }
 
@@ -1358,7 +1360,8 @@ input::placeholder {
     border-radius: var(--radius-full);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background var(--transition-fast), color var(--transition-fast),
+        transform var(--transition-fast);
     flex-shrink: 0;
 }
 

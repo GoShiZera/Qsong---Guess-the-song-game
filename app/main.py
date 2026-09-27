@@ -62,6 +62,11 @@ async def select_playlist_page() -> FileResponse:
     return FileResponse(Path("static/index.html"))
 
 
+@app.get("/playlists")
+async def playlists_page() -> FileResponse:
+    return FileResponse(Path("static/index.html"))
+
+
 # Browsers and link unfurlers request /favicon.ico at the root regardless of
 # the <link rel="icon"> tags; serve the generated .ico instead of a 404.
 @app.get("/favicon.ico", include_in_schema=False)

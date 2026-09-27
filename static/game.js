@@ -10,10 +10,15 @@
     const CLIP_DURATIONS = [400, 800, 1600, 2000, 2500];
     const MAX_ATTEMPTS = 5;
     const API_BASE = '';
+    // URL of each view that has its own address. The game and summary views
+    // have none: they stay on the URL of the screen the match started from.
+    const ROUTES = { home: '/', setup: '/playlists', selectPlaylist: '/select-playlist' };
 
     // ---------- State ----------
     const state = {
-        view: 'setup',
+        view: 'home',
+        origin: 'home',   // view the current match started from; "Voltar" returns there
+        leavingMatch: false, // set while history.back() pops the match entry
         mode: 'normal',   // 'normal' | 'daily'
         daily: null,      // { date, number } while in daily mode
         dailyRounds: null, // [{ correct, attempts }] for the share text
@@ -42,6 +47,7 @@
     // ---------- DOM Elements ----------
     const els = {
         // Views
+        viewHome: document.getElementById('view-home'),
         viewSetup: document.getElementById('view-setup'),
         viewSelectPlaylist: document.getElementById('view-select-playlist'),
         viewGame: document.getElementById('view-game'),
@@ -113,10 +119,17 @@
         finalWrong: document.getElementById('final-wrong'),
         roundsDetail: document.getElementById('rounds-detail'),
         btnNewGame: document.getElementById('btn-new-game'),
+        btnNewGameLabel: document.getElementById('btn-new-game-label'),
         btnShare: document.getElementById('btn-share'),
         shareFeedback: document.getElementById('share-feedback'),
         dailyLabel: document.getElementById('daily-label'),
+
+        // Home
+        homeError: document.getElementById('home-error'),
         dailyButtons: document.querySelectorAll('[data-action="daily"]'),
+        playlistsButtons: document.querySelectorAll('[data-action="playlists"]'),
+        backButtons: document.querySelectorAll('[data-action="back"]'),
+        modalConfirmBody: document.getElementById('modal-confirm-body'),
 
         // Round Result
         resultCover: document.getElementById('result-cover'),
@@ -154,6 +167,7 @@
 
     const showView = (viewName) => {
         const viewMap = {
+            home: 'viewHome',
             setup: 'viewSetup',
             selectPlaylist: 'viewSelectPlaylist',
             game: 'viewGame',
@@ -192,10 +206,114 @@
         if (els.progressText) els.progressText.textContent = text;
     };
 
+    // ---------- Navigation ----------
+    const viewForPath = (path) => {
+        if (path === ROUTES.selectPlaylist) return 'selectPlaylist';
+        if (path === ROUTES.setup) return 'setup';
+        return 'home';
+    };
+
+    // Shows a routed view (home/setup/selectPlaylist), keeps the URL in sync
+    // and runs that screen's entry work. push=false is used when the URL
+    // already changed (popstate) or must stay as is (initial load).
+    const navigateTo = (view, { push = true } = {}) => {
+        const url = ROUTES[view];
+        if (push && url && window.location.pathname !== url) {
+            window.history.pushState({ view }, '', url);
+        }
+        showView(view);
+        if (view === 'home') {
+            hideError(els.homeError);
+        } else if (view === 'setup') {
+            hideError(els.setupError);
+            els.setupForm.hidden = false;
+            els.playlistInput.focus();
+        } else if (view === 'selectPlaylist') {
+            loadUserPlaylists();
+        }
+    };
+
+    // "Playlists/Álbuns" on the home: logged-in players go straight to their
+    // playlists, everyone else to the public-link screen (with login option).
+    const goToPlaylistsMode = async () => {
+        try {
+            const profile = await api.getUserProfile();
+            if (profile && profile.display_name) {
+                navigateTo('selectPlaylist');
+                return;
+            }
+        } catch {
+            // Não autenticado: segue para o setup público
+        }
+        navigateTo('setup');
+    };
+
+    // The game/summary views share the origin's URL, so without an extra
+    // history entry the browser's back button would leave the site (or skip
+    // a screen) instead of reaching our popstate handler.
+    const pushMatchHistoryEntry = () => {
+        window.history.pushState({ view: 'game' }, '', window.location.pathname);
+    };
+
+    const resetMatchState = () => {
+        stopAudio();
+        state.mode = 'normal';
+        state.daily = null;
+        state.dailyRounds = null;
+        state.pool = [];
+        state.currentTrack = null;
+        state.roundHistory = [];
+        state.selectedPlaylistId = null;
+        state.roundNumber = 1;
+        state.correctCount = 0;
+        state.wrongCount = 0;
+        els.playlistInput.value = '';
+        els.roundsInput.value = '';
+        els.btnStart.disabled = true;
+    };
+
+    const leaveMatch = () => {
+        const origin = state.origin;
+        resetMatchState();
+        navigateTo(origin);
+    };
+
+    // Leaves the game/summary and returns to the screen the match started
+    // from: home for the daily challenge, otherwise the playlist screen.
+    // When the match's history entry is still on top, pop it first so the
+    // browser's back button doesn't land on a dead duplicate afterwards; the
+    // popstate handler then finishes the exit.
+    const returnToOrigin = () => {
+        if (window.history.state?.view === 'game') {
+            state.leavingMatch = true;
+            window.history.back();
+            return;
+        }
+        leaveMatch();
+    };
+
+    // "← Voltar": the immediately previous screen. A running match always
+    // asks for confirmation first.
+    const goBack = () => {
+        if (state.view === 'game') {
+            showConfirmBackModal();
+        } else if (state.view === 'summary') {
+            returnToOrigin();
+        } else if (state.view !== 'home') {
+            navigateTo('home');
+        }
+    };
+
     // ---------- Modal Confirm Back Home ----------
+    const MODAL_BODY_NORMAL = 'Se voltar agora, a partida atual será perdida e não poderá ser retomada.';
+    const MODAL_BODY_DAILY = 'Você perderá a jogada de hoje. O desafio só pode ser jogado uma vez por dia.';
+
     const showConfirmBackModal = () => {
         stopAudio();
         if (els.modalConfirmBack) {
+            if (els.modalConfirmBody) {
+                els.modalConfirmBody.textContent = state.mode === 'daily' ? MODAL_BODY_DAILY : MODAL_BODY_NORMAL;
+            }
             els.modalConfirmBack.hidden = false;
             els.modalBtnCancel?.focus();
         }
@@ -209,9 +327,7 @@
 
     const confirmBackHome = () => {
         hideConfirmBackModal();
-        stopAudio();
-        // Redireciona a página para a URL raiz limpa
-        window.location.href = '/';
+        returnToOrigin();
     };
 
     // ---------- Audio (Web Audio API) ----------
@@ -850,12 +966,16 @@
         populateDatalist(data.tracks);
         createAttemptBoxes();
         updateScoreDisplay();
+        pushMatchHistoryEntry();
         showView('game');
         await startNextRound();
     };
 
     const startNewGame = async (playlistId, rounds) => {
         state.mode = 'normal';
+        // Called from both the public setup form and the link form on the
+        // logged-in screen; the match returns to whichever one started it.
+        state.origin = state.view === 'selectPlaylist' ? 'selectPlaylist' : 'setup';
         hideError(els.setupError);
         els.setupForm.hidden = true;
         els.setupProgress.hidden = false;
@@ -894,6 +1014,7 @@
 
     const startGameFromPlaylist = async (playlistId, rounds = null) => {
         state.mode = 'normal';
+        state.origin = 'selectPlaylist';
         state.selectedPlaylistId = playlistId;
         hideError(els.playlistsError);
         els.playlistsList.hidden = true;
@@ -1108,6 +1229,7 @@
         els.dailyLabel.hidden = !isDaily;
         els.btnShare.hidden = !isDaily;
         els.shareFeedback.hidden = true;
+        els.btnNewGameLabel.textContent = isDaily ? 'Voltar ao início' : 'Jogar outra playlist';
         if (isDaily) {
             els.dailyLabel.textContent = `Desafio Diário #${state.daily.number}`;
             state.dailyRounds = (summary.rounds || []).map(r => ({
@@ -1171,15 +1293,17 @@
     };
 
     const startDailyGame = async () => {
-        const errorEl = state.view === 'selectPlaylist' ? els.playlistsError : els.setupError;
+        const errorEl = els.homeError;
         hideError(errorEl);
         setDailyButtonsDisabled(true);
+        state.origin = 'home';
         try {
             const info = await api.dailyInfo();
             const saved = loadDailyResult(info.date);
             if (saved?.summary) {
                 state.mode = 'daily';
                 state.daily = info;
+                pushMatchHistoryEntry();
                 showSummary(saved.summary);
                 return;
             }
@@ -1260,17 +1384,9 @@
         try {
             await api.logout();
         } catch {}
-        // Clear local state
-        state.pool = [];
-        state.currentTrack = null;
-        state.roundHistory = [];
-        state.selectedPlaylistId = null;
-        els.setupForm.hidden = false;
-        els.playlistInput.value = '';
-        els.roundsInput.value = '';
-        els.btnStart.disabled = true;
-        showView('setup');
-        els.playlistInput.focus();
+        els.userProfile.hidden = true;
+        resetMatchState();
+        navigateTo('home');
     };
 
     // ---------- Event Listeners ----------
@@ -1339,42 +1455,33 @@
         els.dailyButtons.forEach(btn => btn.addEventListener('click', startDailyGame));
         els.btnShare?.addEventListener('click', handleShare);
 
-        // New game button
-        els.btnNewGame.addEventListener('click', async () => {
-            state.mode = 'normal';
-            state.daily = null;
-            state.dailyRounds = null;
-            state.pool = [];
-            state.currentTrack = null;
-            state.roundHistory = [];
-            state.selectedPlaylistId = null;
-            state.roundNumber = 1;
-            state.correctCount = 0;
-            state.wrongCount = 0;
-            els.playlistInput.value = '';
-            els.roundsInput.value = '';
-            els.btnStart.disabled = true;
-            hideError(els.setupError);
-            // Verificar se o usuário está autenticado no Spotify
-            try {
-                const profile = await api.getUserProfile();
-                if (profile && profile.display_name) {
-                    window.history.pushState(null, '', '/select-playlist');
-                    showView('selectPlaylist');
-                    loadUserPlaylists();
-                    return;
-                }
-            } catch {
-                // Não autenticado, segue para setup padrão
+        // Home: game modes
+        els.playlistsButtons.forEach(btn => btn.addEventListener('click', goToPlaylistsMode));
+
+        // "← Voltar" on every screen (the game one opens the confirm modal)
+        els.backButtons.forEach(btn => btn.addEventListener('click', goBack));
+
+        // Summary: same destination as "← Voltar"
+        els.btnNewGame.addEventListener('click', () => returnToOrigin());
+
+        // Browser back/forward mirrors "← Voltar"
+        window.addEventListener('popstate', () => {
+            if (state.leavingMatch || state.view === 'summary') {
+                state.leavingMatch = false;
+                leaveMatch();
+                return;
             }
-            window.history.pushState(null, '', '/');
-            els.setupForm.hidden = false;
-            showView('setup');
-            els.playlistInput.focus();
+            if (state.view === 'game') {
+                // Keep the player on the match until they confirm leaving.
+                window.history.pushState({ view: 'game' }, '', window.location.pathname);
+                showConfirmBackModal();
+                return;
+            }
+            const target = viewForPath(window.location.pathname);
+            if (target !== state.view) navigateTo(target, { push: false });
         });
 
         // Back Home Modal
-        els.btnBackHome?.addEventListener('click', showConfirmBackModal);
         els.modalBtnCancel?.addEventListener('click', hideConfirmBackModal);
         els.modalBtnConfirm?.addEventListener('click', confirmBackHome);
         // Fechar modal com tecla Escape
@@ -1419,14 +1526,7 @@
         createAttemptBoxes();
 
         // Check current URL to determine initial view
-        const path = window.location.pathname;
-        if (path === '/select-playlist') {
-            loadUserPlaylists();
-            showView('selectPlaylist');
-        } else {
-            showView('setup');
-            els.playlistInput.focus();
-        }
+        navigateTo(viewForPath(window.location.pathname), { push: false });
     };
 
     // Start when DOM ready
