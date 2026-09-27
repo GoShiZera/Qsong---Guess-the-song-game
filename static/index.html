@@ -3,30 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guess The Song</title>
+    <title>Qsong</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
     <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
     <meta name="theme-color" content="#121212">
-    <link rel="stylesheet" href="/static/style.css?v=2.5">
+    <link rel="stylesheet" href="/static/style.css?v=2.6">
 </head>
 <body>
     <div id="app">
         <!-- View 0: Homepage (escolha do modo de jogo) -->
         <section id="view-home" class="view active" aria-label="Início">
-            <header class="view-header">
-                <h1>Guess The Song</h1>
+            <header class="view-header home-header">
+                <div class="home-brand">
+                    <img src="/static/favicon.svg" alt="" class="home-logo" width="44" height="44">
+                    <h1>Qsong</h1>
+                </div>
                 <p class="subtitle">Adivinhe a música pelo trecho</p>
             </header>
 
-            <div class="setup-options home-options">
-                <button type="button" class="btn btn-spotify" data-action="daily">
+            <div class="mode-grid">
+                <button type="button" class="btn btn-spotify mode-btn" data-action="daily">
                     <svg class="btn-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                     <span>Desafio Diário</span>
                 </button>
-                <button type="button" class="btn btn-spotify" data-action="playlists">
+                <button type="button" class="btn btn-spotify mode-btn" data-action="playlists">
                     <svg class="btn-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="15" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><line x1="3" y1="18" x2="11" y2="18"></line><circle cx="18" cy="17" r="3"></circle><polyline points="21 17 21 5 17 6"></polyline></svg>
-                    <span>Playlists/Álbuns</span>
+                    <span>Playlists</span>
+                </button>
+                <button type="button" class="btn btn-spotify mode-btn mode-wip" disabled aria-label="Álbuns, em desenvolvimento">
+                    <svg class="btn-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="3"></circle></svg>
+                    <span>Álbuns</span>
+                    <span class="wip-badge" aria-hidden="true">WIP</span>
+                </button>
+                <button type="button" class="btn btn-spotify mode-btn mode-wip" disabled aria-label="Desafio VS, em desenvolvimento">
+                    <svg class="btn-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 3 21 7 17 11"></polyline><line x1="3" y1="7" x2="21" y2="7"></line><polyline points="7 21 3 17 7 13"></polyline><line x1="21" y1="17" x2="3" y2="17"></line></svg>
+                    <span>Desafio VS</span>
+                    <span class="wip-badge" aria-hidden="true">WIP</span>
                 </button>
             </div>
 
@@ -299,6 +312,6 @@
         </section>
     </div>
 
-    <script src="/static/game.js?v=2.5"></script>
+    <script src="/static/game.js?v=2.6"></script>
 </body>
 </html>

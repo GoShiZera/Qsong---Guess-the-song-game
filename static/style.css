@@ -1004,15 +1004,72 @@ input::placeholder {
     outline-offset: 2px;
 }
 
-/* Home: the two game modes stacked as equal pills, with the error slot
-   right below them so a failed daily start is read in context. */
-.home-options {
-    padding-top: 24px;
+/* Home: brand header on top, mode grid below the vertical center. The view
+   fills #app's height; the free space splits 3:1 above/below the grid so it
+   sits lower on the screen, farther from the header than from the bottom. */
+#view-home.active {
+    flex: 1;
+    display: grid;
+    grid-template-rows: auto 3fr auto auto 1fr;
+    row-gap: 0;
+}
+
+.home-header {
+    grid-row: 1;
+}
+
+.home-brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+
+.home-logo {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+}
+
+.mode-grid {
+    grid-row: 3;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
 }
 
 #home-error {
-    max-width: 320px;
-    margin: 0 auto;
+    grid-row: 4;
+    margin-top: 16px;
+}
+
+/* Pills fill their grid cell instead of the standalone 320px cap. */
+.mode-btn {
+    position: relative;
+    max-width: none;
+}
+
+/* Modes still in development: grey, inert, clearly not an option yet. */
+.mode-btn.mode-wip:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    opacity: 1;
+    cursor: not-allowed;
+}
+
+.wip-badge {
+    position: absolute;
+    right: 12px;
+    bottom: -8px;
+    padding: 2px 8px;
+    background: #c62828;
+    color: #fff;
+    border-radius: var(--radius-full);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
 }
 
 /* "← Voltar" on routed screens: pinned to the header's top-left, with the
@@ -1221,6 +1278,11 @@ input::placeholder {
 @media (max-width: 480px) {
     .btn-spotify {
         max-width: none;
+    }
+
+    /* Phones: the mode grid becomes a single-column list. */
+    .mode-grid {
+        grid-template-columns: 1fr;
     }
 
     /* Narrow screens: the explainer would be squeezed between the paddings;
