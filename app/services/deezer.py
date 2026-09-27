@@ -19,7 +19,10 @@ def _has_valid_preview(url: str | None) -> bool:
 
 
 async def search_track(artist: str, title: str) -> list[DeezerTrack]:
-    query = f'artist:"{artist}" track:"{title}"'
+    # Deezer's search API doesn't support artist:"..." syntax (returns 0 results).
+    # Use free text search which handles accents/special characters correctly.
+    # We filter by artist match and rank in _select_best_match.
+    query = f"{artist} {title}"
     params: dict[str, str | int] = {"q": query, "limit": 20}
 
     async with _SEMAPHORE:
@@ -70,9 +73,24 @@ async def search_track(artist: str, title: str) -> list[DeezerTrack]:
     return []
 
 
+def _normalize_artist(name: str) -> str:
+    """Normalize artist name for fuzzy matching.
+    Handles common variations: 'e' <-> '&', removes extra spaces, etc.
+    """
+    normalized = name.lower().strip()
+    # Normalize "e" <-> "&" (common in Portuguese duo names)
+    normalized = normalized.replace(" & ", " e ").replace(" &", " e").replace("& ", "e ")
+    # Also handle "feat.", "ft.", "part." variations
+    normalized = normalized.replace(" feat. ", " ").replace(" ft. ", " ").replace(" part. ", " ")
+    # Collapse multiple spaces
+    while "  " in normalized:
+        normalized = normalized.replace("  ", " ")
+    return normalized.strip()
+
+
 def _artist_matches(expected: str, found: str) -> bool:
-    exp = expected.lower().strip()
-    fnd = found.lower().strip()
+    exp = _normalize_artist(expected)
+    fnd = _normalize_artist(found)
     return exp in fnd or fnd in exp
 
 
@@ -111,7 +129,8 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
             len(tracks_with_spotify_preview),
             st.artist,
             st.name,
-            st.preview_url[:80] + "..." if st.preview_url and len(st.preview_url) > 80 else st.preview_url,
+            (st.preview_url[:80] + "..." if st.preview_url and len(st.preview_url) > 80
+             else st.preview_url),
             st.duration_ms,
         )
 
@@ -136,7 +155,10 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
 
     # 2. For tracks without Spotify preview, search Deezer
     if tracks_without_preview:
-        logger.info("match_spotify_to_deezer: searching Deezer for %d tracks", len(tracks_without_preview))
+        logger.info(
+            "match_spotify_to_deezer: searching Deezer for %d tracks",
+            len(tracks_without_preview),
+        )
         tasks = [search_track(st.artist, st.name) for st in tracks_without_preview]
         all_results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -156,7 +178,9 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                 )
                 deezer_errors += 1
                 continue
-            if not results:
+            # Type narrowing: results is list[DeezerTrack] here
+            deezer_results: list[DeezerTrack] = results  # type: ignore[assignment]
+            if not deezer_results:
                 logger.debug(
                     "Deezer search [%d/%d]: no results for '%s - %s'",
                     i + 1,
@@ -166,17 +190,17 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                 )
                 deezer_no_results += 1
                 continue
-            
+
             logger.debug(
                 "Deezer search [%d/%d]: found %d results for '%s - %s'",
                 i + 1,
                 len(tracks_without_preview),
-                len(results),
+                len(deezer_results),
                 st.artist,
                 st.name,
             )
 
-            best = _select_best_match(st.artist, results)  # type: ignore[arg-type]
+            best = _select_best_match(st.artist, deezer_results)
             if best is None:
                 logger.debug(
                     "Deezer search [%d/%d]: no artist match for '%s - %s' (found artists: %s)",
@@ -184,13 +208,24 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
                     len(tracks_without_preview),
                     st.artist,
                     st.name,
-                    [r.artist_name for r in results[:5]],
+                    [r.artist_name for r in deezer_results[:5]],
+                )
+                logger.debug(
+                    "Deezer search [%d/%d]: no artist match for '%s - %s' (found artists: %s)",
+                    i + 1,
+                    len(tracks_without_preview),
+                    st.artist,
+                    st.name,
+                    [r.artist_name for r in deezer_results[:5]],
                 )
                 deezer_no_artist_match += 1
                 continue
             if not _has_valid_preview(best.preview_url):
                 logger.debug(
-                    "Deezer search [%d/%d]: artist match found but NO PREVIEW for '%s - %s' (matched: %s - %s)",
+                    (
+            "Deezer search [%d/%d]: artist match found but NO PREVIEW "
+            "for '%s - %s' (matched: %s - %s)",
+        ),
                     i + 1,
                     len(tracks_without_preview),
                     st.artist,
@@ -214,18 +249,28 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
             )
             deezer_success += 1
             logger.debug(
-                "Deezer search [%d/%d]: SUCCESS - '%s - %s' -> Deezer match '%s - %s' (preview: %s)",
+                (
+            "Deezer search [%d/%d]: SUCCESS - '%s - %s' -> Deezer match "
+            "'%s - %s' (preview: %s)",
+        ),
                 i + 1,
                 len(tracks_without_preview),
                 st.artist,
                 st.name,
                 best.artist_name,
                 best.title,
-                best.preview_url[:80] + "..." if best.preview_url and len(best.preview_url) > 80 else best.preview_url,
+                (
+                best.preview_url[:80] + "..."
+                if best.preview_url and len(best.preview_url) > 80
+                else best.preview_url
+            ),
             )
 
         logger.info(
-            "match_spotify_to_deezer: Deezer results - success: %d, no_results: %d, no_artist_match: %d, no_preview: %d, errors: %d",
+            (
+            "match_spotify_to_deezer: Deezer results - success: %d, "
+            "no_results: %d, no_artist_match: %d, no_preview: %d, errors: %d",
+        ),
             deezer_success,
             deezer_no_results,
             deezer_no_artist_match,
@@ -233,6 +278,11 @@ async def match_spotify_to_deezer(spotify_tracks: list[SpotifyTrack]) -> list[Pl
             deezer_errors,
         )
 
-    logger.info("match_spotify_to_deezer: returning %d playable tracks (Spotify: %d, Deezer: %d)", 
-                len(playable), len(tracks_with_spotify_preview), len(playable) - len(tracks_with_spotify_preview))
+    logger.info(
+        "match_spotify_to_deezer: returning %d playable tracks "
+        "(Spotify: %d, Deezer: %d)",
+        len(playable),
+        len(tracks_with_spotify_preview),
+        len(playable) - len(tracks_with_spotify_preview),
+    )
     return playable

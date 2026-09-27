@@ -285,3 +285,39 @@ async def test_match_spotify_to_deezer_handles_exceptions() -> None:
         playable = await match_spotify_to_deezer(spotify_tracks)
 
     assert playable == []
+
+
+@pytest.mark.asyncio
+async def test_search_track_portuguese_accents() -> None:
+    """
+    Test that free text search works with Portuguese accented characters.
+    This is a regression test for the bug where structured query
+    'artist:"..." track:"..."' returned 0 results for accented queries.
+    """
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.json = lambda: {
+        "data": [
+            {
+                "id": 999,
+                "title": "Te Amo Disgraça",
+                "artist": {"name": "Baco Exu do Blues"},
+                "preview": "https://example.com/preview.mp3",
+                "duration": 180,
+                "rank": 5000,
+            }
+        ]
+    }
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    with patch("httpx.AsyncClient", return_value=mock_client):
+        results = await search_track("Baco Exu do Blues", "Te Amo Disgraça")
+
+    assert len(results) == 1
+    assert results[0].title == "Te Amo Disgraça"
+    assert results[0].artist_name == "Baco Exu do Blues"
+    assert "Disgraça" in results[0].title  # Verify accent preserved
