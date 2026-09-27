@@ -246,7 +246,9 @@ input::placeholder {
     animation: spin 0.8s linear infinite;
 }
 
-/* Same as .user-profile: display above would override the hidden attribute. */
+/* Same as .user-profile: display above would override the hidden attribute
+   (e.g. #btn-share must stay hidden outside the daily challenge). */
+.btn[hidden],
 .btn-loader[hidden],
 .btn-text[hidden] {
     display: none;
