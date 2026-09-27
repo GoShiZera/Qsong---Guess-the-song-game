@@ -642,9 +642,13 @@
     const removeTrackFromDatalist = (guessText) => {
         if (!guessText || !els.tracksDatalist) return;
         const normalizedGuess = guessText.trim().toLowerCase();
+
         const options = els.tracksDatalist.querySelectorAll('option');
         options.forEach(option => {
-            if (option.value.trim().toLowerCase() === normalizedGuess) {
+            const optVal = option.value.trim().toLowerCase();
+            // Match exato (ex: selecionou do dropdown "Nome - Artista")
+            // ou match pelo nome da música caso o usuário tenha digitado apenas o título
+            if (optVal === normalizedGuess || optVal.startsWith(`${normalizedGuess} -`)) {
                 option.remove();
             }
         });
